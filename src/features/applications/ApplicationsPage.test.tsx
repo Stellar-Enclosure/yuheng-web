@@ -1,0 +1,286 @@
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import type { ReactNode } from 'react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { GatewayApiError } from '../../api/client'
+import { ApplicationsPage } from './ApplicationsPage'
+
+const scope = {
+  bizCode: 'retail',
+  namespace: 'ops',
+  env: 'local',
+  appCode: 'order',
+}
+
+const mocks = vi.hoisted(() => ({
+  applications: vi.fn(),
+  application: vi.fn(),
+  openapiSyncStates: vi.fn(),
+  createApplication: vi.fn(),
+}))
+
+vi.mock('../../api/gatewayApi', () => ({
+  gatewayApi: {
+    applications: mocks.applications,
+    application: mocks.application,
+    openapiSyncStates: mocks.openapiSyncStates,
+    createApplication: mocks.createApplication,
+    updateApplication: vi.fn(),
+    credentials: vi.fn(),
+    createCredential: vi.fn(),
+    rotateCredential: vi.fn(),
+    revokeCredential: vi.fn(),
+  },
+}))
+
+vi.mock('../../hooks/useGatewayScopeBindings', () => ({
+  useGatewayScopeBindings: () => ({
+    data: [{ ...scope, bindingId: 'binding-default', appName: 'Order', connected: false }],
+    isLoading: false,
+    error: null,
+    refetch: vi.fn(),
+  }),
+}))
+
+vi.mock('../../app/capabilities', () => ({
+  useCapability: () => true,
+}))
+
+vi.mock('antd', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('antd')>()
+  return {
+    ...actual,
+    Modal: ({
+      children,
+      onCancel,
+      onOk,
+      open,
+      title,
+    }: {
+      children?: ReactNode
+      onCancel?: () => void
+      onOk?: () => void
+      open?: boolean
+      title?: ReactNode
+    }) => open ? (
+      <section aria-label={String(title)}>
+        <h2>{title}</h2>
+        {children}
+        <button type="button" onClick={onCancel}>Cancel</button>
+        <button type="button" onClick={onOk}>OK</button>
+      </section>
+    ) : null,
+    message: { success: vi.fn() },
+  }
+})
+
+const renderPage = () => {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      mutations: { retry: false },
+      queries: { retry: false },
+    },
+  })
+  render(
+    <QueryClientProvider client={queryClient}>
+    <MemoryRouter initialEntries={['/applications']}>
+      <ApplicationsPage />
+    </MemoryRouter>
+    </QueryClientProvider>,
+  )
+  return queryClient
+}
+
+beforeEach(() => {
+  mocks.applications.mockReset().mockResolvedValue([])
+  mocks.application.mockReset().mockResolvedValue({
+    id: 'application-order',
+    applicationCode: 'order',
+    displayName: 'Order Yuheng',
+    ...scope,
+    ddcMatched: true,
+    revision: 0,
+  })
+  mocks.openapiSyncStates.mockReset().mockResolvedValue([])
+  mocks.createApplication.mockReset().mockResolvedValue({
+    id: 'application-order',
+    applicationCode: 'order',
+    displayName: 'Order Yuheng',
+    ...scope,
+    ddcMatched: true,
+    revision: 0,
+  })
+  vi.stubGlobal('matchMedia', vi.fn().mockImplementation(() => ({
+    matches: false,
+    addListener: vi.fn(),
+    removeListener: vi.fn(),
+    addEventListener: vi.fn(),
+    removeEventListener: vi.fn(),
+    dispatchEvent: vi.fn(),
+  })))
+  vi.stubGlobal('ResizeObserver', class {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  })
+})
+
+afterEach(() => {
+  cleanup()
+  vi.unstubAllGlobals()
+})
+
+describe('ApplicationsPage Tianshu identity', () => {
+  const chooseBinding = async () => {
+    fireEvent.mouseDown(screen.getByLabelText('Scope Binding'))
+    fireEvent.click(await screen.findByText('retail / order / local / ops / Order'))
+  }
+
+  it('creates an application from the selected read-only Tianshu scope', async () => {
+    renderPage()
+    await screen.findByText('Application / Credential')
+
+    fireEvent.click(screen.getByRole('button', { name: '新建 Application' }))
+
+    await chooseBinding()
+
+    fireEvent.change(screen.getByLabelText('名称'), {
+      target: { value: 'Order Yuheng' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }))
+
+    await waitFor(() => expect(mocks.createApplication).toHaveBeenCalledWith({
+      bizCode: 'retail',
+      namespace: 'ops',
+      env: 'local',
+      applicationCode: 'order',
+      displayName: 'Order Yuheng',
+      description: undefined,
+    }))
+  })
+
+  it('shows duplicate physical application errors in the modal', async () => {
+    mocks.createApplication.mockRejectedValue(new GatewayApiError(
+      409,
+      'YUHENG_ADMIN_APPLICATION_ALREADY_EXISTS',
+      'yuheng application already exists: application-order',
+    ))
+    renderPage()
+    await screen.findByText('Application / Credential')
+    fireEvent.click(screen.getByRole('button', { name: '新建 Application' }))
+    await chooseBinding()
+    fireEvent.change(screen.getByLabelText('名称'), {
+      target: { value: 'Order Yuheng' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'OK' }))
+
+    expect(await screen.findByText(
+      'yuheng application already exists: application-order',
+    )).toBeInTheDocument()
+  })
+})
+
+describe('ApplicationsPage OpenAPI aggregation', () => {
+  it('opens application details through the detail query', async () => {
+    mocks.applications.mockResolvedValue([{
+      id: 'application-order',
+      applicationCode: 'order',
+      displayName: 'Order Yuheng',
+      ...scope,
+      ddcMatched: true,
+      revision: 0,
+    }])
+    renderPage()
+
+    await screen.findByText('Order Yuheng')
+    fireEvent.click(screen.getByRole('button', { name: /详.*情/ }))
+
+    expect(await screen.findByText('application-order')).toBeInTheDocument()
+    expect(mocks.application).toHaveBeenCalledWith('application-order', expect.anything())
+  })
+
+  it('shows the newest build worst status and expandable Group details', async () => {
+    mocks.applications.mockResolvedValue([{
+      id: 'application-order',
+      applicationCode: 'order',
+      displayName: 'Order Yuheng',
+      ...scope,
+      ddcMatched: true,
+      revision: 0,
+    }])
+    mocks.openapiSyncStates.mockResolvedValue([
+      {
+        id: 'sync-orders',
+        applicationId: 'application-order',
+        buildId: 'build-2',
+        artifactVersion: '2.0.0',
+        openapiGroup: 'orders',
+        sourceType: 'OPENAPI31',
+        status: 'VALID',
+        snapshotId: 'snapshot-orders',
+        definitionSetId: 'set-2',
+        operationCount: 2,
+        schemaCount: 1,
+        canonicalSha256: 'a'.repeat(64),
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        lastAttemptAt: '2026-08-26T03:00:00Z',
+        lastSuccessAt: '2026-08-26T03:00:01Z',
+        nextRetryAt: null,
+      },
+      {
+        id: 'sync-inventory',
+        applicationId: 'application-order',
+        buildId: 'build-2',
+        artifactVersion: '2.0.0',
+        openapiGroup: 'inventory',
+        sourceType: 'OPENAPI31',
+        status: 'INCONSISTENT_BUILD',
+        snapshotId: 'snapshot-inventory',
+        definitionSetId: null,
+        operationCount: 1,
+        schemaCount: 1,
+        canonicalSha256: 'b'.repeat(64),
+        lastErrorCode: 'YUHENG_OPENAPI_GROUP_DRIFT',
+        lastErrorMessage: 'inventory document drifted',
+        lastAttemptAt: '2026-08-26T03:00:00Z',
+        lastSuccessAt: null,
+        nextRetryAt: null,
+      },
+      {
+        id: 'sync-old',
+        applicationId: 'application-order',
+        buildId: 'build-1',
+        artifactVersion: '1.0.0',
+        openapiGroup: 'orders',
+        sourceType: 'OPENAPI31',
+        status: 'VALID',
+        snapshotId: 'snapshot-old',
+        definitionSetId: 'set-1',
+        operationCount: 1,
+        schemaCount: 1,
+        canonicalSha256: 'c'.repeat(64),
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        lastAttemptAt: '2026-08-25T03:00:00Z',
+        lastSuccessAt: '2026-08-25T03:00:01Z',
+        nextRetryAt: null,
+      },
+    ])
+
+    renderPage()
+
+    expect(await screen.findByText('Order Yuheng')).toBeInTheDocument()
+    expect(screen.getByText('INCONSISTENT_BUILD')).toBeInTheDocument()
+    expect(screen.getByText('Aggregate · set 未完成')).toBeInTheDocument()
+
+    fireEvent.click(screen.getByRole('button', {
+      name: '展开 OpenAPI Groups Order Yuheng',
+    }))
+
+    expect(await screen.findByText('inventory')).toBeInTheDocument()
+    expect(screen.getByText(/YUHENG_OPENAPI_GROUP_DRIFT/)).toBeInTheDocument()
+    expect(screen.getByText(/inventory document drifted/)).toBeInTheDocument()
+  })
+})

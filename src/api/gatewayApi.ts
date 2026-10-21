@@ -1,0 +1,853 @@
+import {apiRequest} from './client'
+import {normalizeEngineMetadata} from './types'
+import {createLogicalTrace, type LogicalTrace, newIdempotencyKey} from './trace'
+import type {
+    Application,
+    AuditEntry,
+    CatalogTree,
+    Credential,
+    DashboardSummary,
+    DraftMutationResult,
+    EngineNode,
+    EngineNodeConsistency,
+    GatewayDraft,
+    GatewayGroup,
+    GatewayRelease,
+    GatewayScopeBinding,
+    IssuedCredential,
+    McpAppArtifact,
+    McpApproval,
+    McpCapabilityDraft,
+    McpCapabilityMutation,
+    McpCapabilityPlural,
+    McpCapabilityPreview,
+    McpManagedTool,
+    McpManagedToolOverrideMutation,
+    McpMutationResult,
+    McpOperationOption,
+    McpProtocolDialect,
+    McpProtocolInspection,
+    McpRemoteCapability,
+    McpRemoteMount,
+    McpRemoteMountMutation,
+    McpRemoteProvider,
+    McpRemoteProviderMutation,
+    McpRemoteTool,
+    McpRemoteToolMutation,
+    McpServer,
+    McpServerMutation,
+    McpTask,
+    McpToolReference,
+    McpValidationReport,
+    OperationDetail,
+    GatewayOpenApiDocument,
+    GatewayOpenApiSyncState,
+    GatewayOperationOpenApi,
+    GatewayOperationMutationResult,
+    Page,
+    ProviderInstance,
+    RuntimeConsistency,
+    Scope,
+    TraceSummary,
+    ValidationReport,
+} from './types'
+
+const admin = '/api/v1/yuheng/admin'
+const queryString = (values: Record<string, string | undefined>): string => {
+  const params = new URLSearchParams()
+  Object.entries(values).forEach(([name, value]) => {
+    const normalized = value?.trim()
+    if (normalized) params.set(name, normalized)
+  })
+  return params.toString()
+}
+
+const withQuery = (path: string, values: Record<string, string | undefined>): string => {
+  const encoded = queryString(values)
+  return encoded ? `${path}?${encoded}` : path
+}
+
+const withFilters = (
+  path: string,
+  values: Record<string, string | undefined>,
+  filters?: URLSearchParams,
+): string => {
+  const params = new URLSearchParams(queryString(values))
+  filters?.forEach((value, key) => {
+    const normalized = value.trim()
+    if (normalized) params.set(key, normalized)
+  })
+  const encoded = params.toString()
+  return encoded ? `${path}?${encoded}` : path
+}
+
+type ProjectionEnvelope<T> = {
+  value: T
+  observedAt: string
+  source: string
+  stale: boolean
+  refreshError?: string
+}
+
+type EngineNodeResponse = Omit<EngineNode, 'observedAt' | 'stale' | 'metadata'> & {
+  metadata?: unknown
+}
+
+type RuntimeConsistencyResponse = {
+  targetReleaseId?: string
+  targetReleaseStatus?: string
+  engineNodeCount: number
+  readyEngineNodeCount: number
+  nodes?: EngineNodeConsistency[] | null
+  consistent: boolean
+  observedAt: string
+  source: string
+  stale: boolean
+}
+
+type ProviderInstanceResponse = Omit<ProviderInstance, 'stale'>
+
+type DraftResponse = Omit<GatewayDraft, 'routes' | 'policies'> & {
+  routes: Array<Omit<GatewayDraft['routes'][number], 'routeContent'> & {
+    content: Record<string, unknown>
+  }>
+  policies: Array<Omit<GatewayDraft['policies'][number], 'policyContent'> & {
+    content: Record<string, unknown>
+  }>
+}
+
+type ReleaseResponse = Omit<GatewayRelease, 'id'> & {
+  releaseId: string
+}
+
+const mapDraft = (draft: DraftResponse): GatewayDraft => ({
+  ...draft,
+  routes: draft.routes.map(({ content, ...route }) => ({
+    ...route,
+    routeContent: content,
+  })),
+  policies: draft.policies.map(({ content, ...policy }) => ({
+    ...policy,
+    policyContent: content,
+  })),
+})
+
+const mapRelease = ({ releaseId, ...release }: ReleaseResponse): GatewayRelease => ({
+  ...release,
+  id: releaseId,
+})
+
+export const gatewayApi = {
+  scopes: (signal?: AbortSignal) =>
+    apiRequest<GatewayScopeBinding[]>(`${admin}/scopes`, { signal }),
+  dashboard: (scope: Scope, signal?: AbortSignal) =>
+    apiRequest<DashboardSummary>(withQuery(`${admin}/dashboard`, scope), { signal }),
+  groups: (signal?: AbortSignal) =>
+    apiRequest<GatewayGroup[]>(`${admin}/yuheng-groups`, { signal }),
+  createGroup: (
+    group: {
+      gatewayGroupCode: string
+      displayName: string
+      env: string
+      namespace: string
+      description?: string
+    },
+    trace = createLogicalTrace(),
+  ) => apiRequest<GatewayGroup>(`${admin}/yuheng-groups`, {
+    method: 'POST',
+    body: group,
+    trace,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  updateGroup: (
+    groupId: string,
+    group: { displayName: string; description?: string; expectedRevision: number },
+    trace = createLogicalTrace(),
+  ) => apiRequest<GatewayGroup>(`${admin}/yuheng-groups/${groupId}`, {
+    method: 'PUT',
+    body: group,
+    trace,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  setGroupEnabled: (
+    groupId: string,
+    enabled: boolean,
+    trace = createLogicalTrace(),
+  ) => apiRequest<GatewayGroup>(
+    `${admin}/yuheng-groups/${groupId}/${enabled ? 'enable' : 'disable'}`,
+    { method: 'POST', trace, idempotencyKey: newIdempotencyKey() },
+  ),
+  group: (groupId: string, signal?: AbortSignal) =>
+    apiRequest<GatewayGroup>(`${admin}/yuheng-groups/${groupId}`, { signal }),
+  engineNodes: async (groupId: string, signal?: AbortSignal) => {
+    const projection = await apiRequest<ProjectionEnvelope<EngineNodeResponse[]>>(
+      `${admin}/yuheng-groups/${groupId}/engine-nodes`,
+      { signal },
+    )
+    return projection.value.map((node) => ({
+      ...node,
+      metadata: normalizeEngineMetadata(node.metadata),
+      observedAt: projection.observedAt,
+      stale: projection.stale,
+    }))
+  },
+  consistency: async (groupId: string, signal?: AbortSignal) => {
+    const value = await apiRequest<RuntimeConsistencyResponse>(
+      `${admin}/yuheng-groups/${groupId}/runtime-consistency`,
+      { signal },
+    )
+    return {
+      targetReleaseId: value.targetReleaseId,
+      targetReleaseStatus: value.targetReleaseStatus,
+      readyNodes: value.readyEngineNodeCount,
+      nodes: value.nodes ?? [],
+      totalNodes: value.engineNodeCount,
+      consistent: value.consistent,
+      stale: value.stale,
+      source: value.source,
+      observedAt: value.observedAt,
+    } satisfies RuntimeConsistency
+  },
+  applications: (filters: Partial<Scope> = {}, signal?: AbortSignal) =>
+    apiRequest<Application[]>(withQuery(`${admin}/applications`, filters), { signal }),
+  application: (applicationId: string, signal?: AbortSignal) =>
+    apiRequest<Application>(`${admin}/applications/${encodeURIComponent(applicationId)}`, { signal }),
+  createApplication: (
+    application: {
+      bizCode: string
+      applicationCode: string
+      displayName: string
+      env: string
+      namespace: string
+      description?: string
+    },
+  ) => apiRequest<Application>(`${admin}/applications`, {
+    method: 'POST',
+    body: application,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  updateApplication: (
+    applicationId: string,
+    application: {
+      displayName: string
+      description?: string
+      expectedRevision: number
+    },
+  ) => apiRequest<Application>(`${admin}/applications/${applicationId}`, {
+    method: 'PUT',
+    body: application,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  credentials: (applicationId: string, signal?: AbortSignal) =>
+    apiRequest<Credential[]>(`${admin}/applications/${applicationId}/credentials`, { signal }),
+  createCredential: (applicationId: string) =>
+    apiRequest<IssuedCredential>(`${admin}/applications/${applicationId}/credentials`, {
+      method: 'POST',
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  rotateCredential: (applicationId: string, keyId: string, overlapMinutes: number) =>
+    apiRequest<IssuedCredential>(
+      `${admin}/applications/${applicationId}/credentials/${keyId}/rotate`,
+      {
+        method: 'POST',
+        body: { overlapMinutes },
+        idempotencyKey: newIdempotencyKey(),
+      },
+    ),
+  revokeCredential: (applicationId: string, keyId: string) =>
+    apiRequest<Credential>(
+      `${admin}/applications/${applicationId}/credentials/${keyId}/revoke`,
+      { method: 'POST', idempotencyKey: newIdempotencyKey() },
+    ),
+  catalog: (applicationId: string, signal?: AbortSignal) =>
+    apiRequest<CatalogTree>(`${admin}/applications/${applicationId}/catalog`, { signal }),
+  createManualInterfaceGroup: (
+    applicationId: string,
+    hierarchy: {
+      businessCode: string
+      businessName: string
+      entityCode: string
+      entityName: string
+      interfaceGroupCode: string
+      interfaceGroupName: string
+      className?: string
+      description?: string
+    },
+  ) => apiRequest<{ id: string }>(
+    `${admin}/applications/${applicationId}/manual-interface-groups`,
+    {
+      method: 'POST',
+      body: hierarchy,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  ),
+  createManualOperation: (
+    interfaceGroupId: string,
+    operation: Record<string, unknown>,
+  ) => apiRequest<OperationDetail>(
+    `${admin}/interface-groups/${interfaceGroupId}/manual-operations`,
+    {
+      method: 'POST',
+      body: operation,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  ),
+  operation: (operationId: string, signal?: AbortSignal) =>
+    apiRequest<OperationDetail>(`${admin}/operations/${operationId}`, { signal }),
+  updateOperationMetadata: (
+    operationId: string,
+    body: { summary?: string; tags: string[]; owner?: string },
+    trace = createLogicalTrace(),
+  ) => apiRequest<GatewayOperationMutationResult>(
+    `${admin}/operations/${encodeURIComponent(operationId)}/metadata`,
+    {
+      method: 'PUT',
+      body,
+      trace,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  ),
+  updateManualDefinition: (
+    operationId: string,
+    body: Record<string, unknown>,
+    trace = createLogicalTrace(),
+  ) => apiRequest<GatewayOperationMutationResult>(
+    `${admin}/operations/${encodeURIComponent(operationId)}/manual-definition`,
+    {
+      method: 'PUT',
+      body,
+      trace,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  ),
+  deprecateOperation: (operationId: string, trace = createLogicalTrace()) =>
+    apiRequest<GatewayOperationMutationResult>(
+      `${admin}/operations/${encodeURIComponent(operationId)}/deprecate`,
+      {
+        method: 'POST',
+        trace,
+        idempotencyKey: newIdempotencyKey(),
+      },
+    ),
+  openapiSyncStates: (filters: Partial<Scope> = {}, signal?: AbortSignal) =>
+    apiRequest<GatewayOpenApiSyncState[]>(
+      withQuery(`${admin}/openapi/sync-states`, filters),
+      { signal },
+    ),
+  operationOpenApi: (operationId: string, signal?: AbortSignal) =>
+    apiRequest<GatewayOperationOpenApi>(
+      `${admin}/operations/${encodeURIComponent(operationId)}/openapi`,
+      { signal },
+    ),
+  openapiSnapshotDocument: (snapshotId: string, signal?: AbortSignal) =>
+    apiRequest<GatewayOpenApiDocument>(
+      `${admin}/openapi/snapshots/${encodeURIComponent(snapshotId)}/document`,
+      { signal },
+    ),
+  draft: async (groupId: string, signal?: AbortSignal) =>
+    mapDraft(await apiRequest<DraftResponse>(
+      `${admin}/yuheng-groups/${groupId}/draft`,
+      { signal },
+    )),
+  saveRoute: (
+    groupId: string,
+    routeId: string,
+    route: {
+      operationId: string
+      content: Record<string, unknown>
+      enabled: boolean
+      changeReason: string
+    },
+    revision: number,
+    trace = createLogicalTrace(),
+  ) => {
+    const idempotencyKey = newIdempotencyKey()
+    return apiRequest<DraftMutationResult>(
+      `${admin}/yuheng-groups/${groupId}/draft/routes/${routeId}`,
+      {
+      method: 'PUT',
+      body: { ...route, expectedRevision: revision, idempotencyKey },
+      trace,
+      idempotencyKey,
+      },
+    )
+  },
+  savePolicy: (
+    groupId: string,
+    policyId: string,
+    policy: {
+      policyType: string
+      policyScope: string
+      content: Record<string, unknown>
+      enabled: boolean
+      changeReason: string
+    },
+    revision: number,
+    trace = createLogicalTrace(),
+  ) => {
+    const idempotencyKey = newIdempotencyKey()
+    return apiRequest<DraftMutationResult>(
+      `${admin}/yuheng-groups/${groupId}/draft/policies/${policyId}`,
+      {
+        method: 'PUT',
+        body: { ...policy, expectedRevision: revision, idempotencyKey },
+        trace,
+        idempotencyKey,
+      },
+    )
+  },
+  deleteRoute: (
+    groupId: string,
+    routeId: string,
+    revision: number,
+    changeReason: string,
+  ) => {
+    const idempotencyKey = newIdempotencyKey()
+    return apiRequest<DraftMutationResult>(
+      `${admin}/yuheng-groups/${groupId}/draft/routes/${routeId}`,
+      {
+      method: 'DELETE',
+      body: { expectedRevision: revision, changeReason, idempotencyKey },
+      idempotencyKey,
+      },
+    )
+  },
+  deletePolicy: (
+    groupId: string,
+    policyId: string,
+    revision: number,
+    changeReason: string,
+  ) => {
+    const idempotencyKey = newIdempotencyKey()
+    return apiRequest<DraftMutationResult>(
+      `${admin}/yuheng-groups/${groupId}/draft/policies/${policyId}`,
+      {
+      method: 'DELETE',
+      body: { expectedRevision: revision, changeReason, idempotencyKey },
+      idempotencyKey,
+      },
+    )
+  },
+  validateDraft: (groupId: string, trace: LogicalTrace | undefined) =>
+    apiRequest<ValidationReport>(`${admin}/yuheng-groups/${groupId}/draft/validate`, {
+      method: 'POST',
+      trace,
+    }),
+  draftDiff: (groupId: string, signal?: AbortSignal) =>
+    apiRequest<Record<string, unknown>>(`${admin}/yuheng-groups/${groupId}/draft/diff`, {
+      signal,
+    }),
+  releases: async (groupId: string, signal?: AbortSignal) =>
+    (await apiRequest<ReleaseResponse[]>(
+      `${admin}/yuheng-groups/${groupId}/releases`,
+      { signal },
+    )).map(mapRelease),
+  release: (
+    releaseId: string,
+    signal?: AbortSignal,
+    trace?: LogicalTrace,
+  ) =>
+    apiRequest<ReleaseResponse>(`${admin}/releases/${releaseId}`, {
+      signal,
+      trace,
+    }).then(mapRelease),
+  releaseDiff: (releaseId: string, signal?: AbortSignal) =>
+    apiRequest<Record<string, unknown>>(
+      `${admin}/releases/${encodeURIComponent(releaseId)}/diff`,
+      { signal },
+    ),
+  publish: (
+    groupId: string,
+    draftRevision: number,
+    changeReason: string,
+    trace = createLogicalTrace(),
+  ) =>
+    apiRequest<ReleaseResponse>(`${admin}/yuheng-groups/${groupId}/releases`, {
+      method: 'POST',
+      body: { expectedDraftRevision: draftRevision, changeReason },
+      trace,
+      idempotencyKey: newIdempotencyKey(),
+    }).then(mapRelease),
+  retryRelease: (releaseId: string, trace = createLogicalTrace()) =>
+    apiRequest<ReleaseResponse>(`${admin}/releases/${releaseId}/retry`, {
+      method: 'POST',
+      body: { reason: 'Retry from Yuheng Admin Web' },
+      trace,
+      idempotencyKey: newIdempotencyKey(),
+    }).then(mapRelease),
+  rollback: (
+    groupId: string,
+    releaseId: string,
+    expectedDraftRevision: number,
+    reason: string,
+    trace = createLogicalTrace(),
+  ) =>
+    apiRequest<ReleaseResponse>(`${admin}/yuheng-groups/${groupId}/rollback`, {
+      method: 'POST',
+      body: {
+        sourceReleaseId: releaseId,
+        expectedDraftRevision,
+        changeReason: reason,
+      },
+      trace,
+      idempotencyKey: newIdempotencyKey(),
+    }).then(mapRelease),
+  providers: async (scope: Scope, signal?: AbortSignal) => {
+    const projection = await apiRequest<ProjectionEnvelope<ProviderInstanceResponse[]>>(
+      withQuery(`${admin}/providers/instances`, scope),
+      { signal },
+    )
+    return projection.value.map((instance) => ({
+      ...instance,
+      stale: projection.stale,
+    }))
+  },
+  traces: (
+    scope: Pick<Scope, 'env' | 'namespace'>,
+    filters: URLSearchParams,
+    signal?: AbortSignal,
+  ) =>
+    apiRequest<Page<TraceSummary>>(
+      withFilters(`${admin}/observability/traces`, scope, filters),
+      { signal },
+    ),
+  audits: (
+    scope: Pick<Scope, 'env' | 'namespace'>,
+    filters: URLSearchParams,
+    signal?: AbortSignal,
+  ) => apiRequest<Page<AuditEntry>>(withFilters(`${admin}/audit`, scope, filters), {
+      signal,
+    }),
+  mcpServers: (gatewayGroupId: string, signal?: AbortSignal) =>
+    apiRequest<McpServer[]>(
+      `${admin}/mcp/servers?${new URLSearchParams({ gatewayGroupId })}`,
+      { signal },
+    ),
+  mcpServer: (serverId: string, signal?: AbortSignal) =>
+    apiRequest<McpServer>(`${admin}/mcp/servers/${serverId}`, { signal }),
+  createMcpServer: (server: McpServerMutation) =>
+    apiRequest<McpMutationResult>(`${admin}/mcp/servers`, {
+      method: 'POST',
+      body: server,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  updateMcpServer: (serverId: string, server: McpServerMutation) =>
+    apiRequest<McpMutationResult>(`${admin}/mcp/servers/${serverId}`, {
+      method: 'PUT',
+      body: server,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  deleteMcpServer: (
+    serverId: string,
+    control: {
+      gatewayGroupId: string
+      expectedRevision: number
+      expectedDraftRevision: number
+      changeReason: string
+    },
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/servers/${serverId}`, {
+    method: 'DELETE',
+    body: control,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  validateMcpServer: (serverId: string) =>
+    apiRequest<McpValidationReport>(`${admin}/mcp/servers/${serverId}/validate`, {
+      method: 'POST',
+    }),
+  previewMcpServer: (serverId: string, signal?: AbortSignal) =>
+    apiRequest<McpCapabilityPreview>(
+      `${admin}/mcp/servers/${serverId}/capability-preview`,
+      { signal },
+    ),
+  mcpManagedTools: (
+    gatewayGroupId: string,
+    serverId: string,
+    signal?: AbortSignal,
+  ) => apiRequest<McpManagedTool[]>(
+    `${admin}/mcp/groups/${gatewayGroupId}/managed-tools?${new URLSearchParams({ serverId })}`,
+    { signal },
+  ),
+  updateMcpManagedToolOverride: (
+    toolId: string,
+    override: McpManagedToolOverrideMutation,
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/managed-tools/${toolId}/override`, {
+    method: 'PUT',
+    body: override,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  deleteMcpManagedToolOverride: (
+    toolId: string,
+    control: {
+      gatewayGroupId: string
+      expectedRevision: number
+      expectedDraftRevision: number
+      changeReason: string
+    },
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/managed-tools/${toolId}/override`, {
+    method: 'DELETE',
+    body: control,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  mcpRemoteTools: (
+    gatewayGroupId: string,
+    serverId: string,
+    signal?: AbortSignal,
+  ) => apiRequest<McpRemoteTool[]>(
+    `${admin}/mcp/remote-tools?${new URLSearchParams({ gatewayGroupId, serverId })}`,
+    { signal },
+  ),
+  createMcpRemoteTool: (tool: McpRemoteToolMutation) =>
+    apiRequest<McpMutationResult>(`${admin}/mcp/remote-tools`, {
+      method: 'POST',
+      body: tool,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  updateMcpRemoteTool: (toolId: string, tool: McpRemoteToolMutation) =>
+    apiRequest<McpMutationResult>(`${admin}/mcp/remote-tools/${toolId}`, {
+      method: 'PUT',
+      body: tool,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  deleteMcpRemoteTool: (
+    toolId: string,
+    control: {
+      gatewayGroupId: string
+      expectedRevision: number
+      expectedDraftRevision: number
+      changeReason: string
+    },
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/remote-tools/${toolId}`, {
+    method: 'DELETE',
+    body: control,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  mcpToolReferences: async (
+    gatewayGroupId: string,
+    serverId: string,
+    signal?: AbortSignal,
+  ): Promise<McpToolReference[]> => {
+    const [managedTools, remoteTools] = await Promise.all([
+      gatewayApi.mcpManagedTools(gatewayGroupId, serverId, signal),
+      gatewayApi.mcpRemoteTools(gatewayGroupId, serverId, signal),
+    ])
+    return [
+      ...managedTools.map((tool) => ({
+        name: tool.name,
+        riskLevel: tool.effectiveRiskLevel,
+        enabled: tool.enabled,
+      })),
+      ...remoteTools.map((tool) => ({
+        name: tool.name,
+        riskLevel: tool.riskLevel,
+        enabled: tool.enabled,
+      })),
+    ].sort((left, right) => left.name.localeCompare(right.name))
+  },
+  mcpCapabilities: (
+    gatewayGroupId: string,
+    serverId: string,
+    plural: McpCapabilityPlural,
+    signal?: AbortSignal,
+  ) => apiRequest<McpCapabilityDraft[]>(
+    `${admin}/mcp/servers/${serverId}/${plural}?${new URLSearchParams({ gatewayGroupId })}`,
+    { signal },
+  ),
+  createMcpCapability: (
+    plural: McpCapabilityPlural,
+    capability: McpCapabilityMutation,
+  ) => apiRequest<McpMutationResult>(
+    `${admin}/mcp/servers/${capability.serverId}/${plural}`,
+    {
+      method: 'POST',
+      body: capability,
+      idempotencyKey: newIdempotencyKey(),
+    },
+  ),
+  updateMcpCapability: (
+    plural: McpCapabilityPlural,
+    capabilityId: string,
+    capability: McpCapabilityMutation,
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/${plural}/${capabilityId}`, {
+    method: 'PUT',
+    body: capability,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  deleteMcpCapability: (
+    plural: McpCapabilityPlural,
+    capabilityId: string,
+    control: {
+      gatewayGroupId: string
+      expectedRevision: number
+      expectedDraftRevision: number
+      changeReason: string
+    },
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/${plural}/${capabilityId}`, {
+    method: 'DELETE',
+    body: control,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  validateMcpCapability: (
+    plural: McpCapabilityPlural,
+    capabilityId: string,
+    gatewayGroupId: string,
+  ) => apiRequest<McpValidationReport>(
+    `${admin}/mcp/${plural}/${encodeURIComponent(capabilityId)}/validate?${new URLSearchParams({ gatewayGroupId })}`,
+    { method: 'POST' },
+  ),
+  inspectMcpProtocol: (
+    serverId: string,
+    request: {
+      dialect: McpProtocolDialect
+      method: string
+      params: Record<string, unknown>
+    },
+  ) => apiRequest<McpProtocolInspection>(
+    `${admin}/mcp/servers/${serverId}/protocol-inspect`,
+    { method: 'POST', body: request },
+  ),
+  mcpOperationOptions: async (
+    applicationId: string,
+    signal?: AbortSignal,
+  ): Promise<McpOperationOption[]> => {
+    const catalog = await gatewayApi.catalog(applicationId, signal)
+    return catalog.businessDomains.flatMap(
+      (business) => business.entityDomains.flatMap(
+        (entity) => entity.interfaceGroups.flatMap(
+          (group) => group.operations.map((operation) => ({
+            value: operation.id,
+            label: `${operation.operationKey} · ${operation.protocol} ${operation.methodIdentity}`,
+          })),
+        ),
+      ),
+    ).sort((left, right) => left.label.localeCompare(right.label))
+  },
+  mcpRemoteProviders: (gatewayGroupId: string, signal?: AbortSignal) =>
+    apiRequest<McpRemoteProvider[]>(
+      `${admin}/mcp/remote/providers?${new URLSearchParams({ gatewayGroupId })}`,
+      { signal },
+    ),
+  createMcpRemoteProvider: (provider: McpRemoteProviderMutation) =>
+    apiRequest<McpMutationResult>(`${admin}/mcp/remote/providers`, {
+      method: 'POST',
+      body: provider,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  updateMcpRemoteProvider: (providerId: string, provider: McpRemoteProviderMutation) =>
+    apiRequest<McpMutationResult>(`${admin}/mcp/remote/providers/${providerId}`, {
+      method: 'PUT',
+      body: provider,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  deleteMcpRemoteProvider: (
+    providerId: string,
+    control: {
+      gatewayGroupId: string
+      expectedRevision: number
+      expectedDraftRevision: number
+      changeReason: string
+    },
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/remote/providers/${providerId}`, {
+    method: 'DELETE',
+    body: control,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  discoverMcpRemoteProvider: (providerId: string) =>
+    apiRequest<McpRemoteCapability[]>(`${admin}/mcp/remote/providers/${providerId}/discover`, {
+      method: 'POST',
+    }),
+  mcpRemoteMounts: (gatewayGroupId: string, signal?: AbortSignal) =>
+    apiRequest<McpRemoteMount[]>(
+      `${admin}/mcp/remote/mounts?${new URLSearchParams({ gatewayGroupId })}`,
+      { signal },
+    ),
+  createMcpRemoteMount: (mount: McpRemoteMountMutation) =>
+    apiRequest<McpMutationResult>(`${admin}/mcp/remote/mounts`, {
+      method: 'POST',
+      body: mount,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  updateMcpRemoteMount: (mountId: string, mount: McpRemoteMountMutation) =>
+    apiRequest<McpMutationResult>(`${admin}/mcp/remote/mounts/${mountId}`, {
+      method: 'PUT',
+      body: mount,
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  deleteMcpRemoteMount: (
+    mountId: string,
+    control: {
+      gatewayGroupId: string
+      expectedRevision: number
+      expectedDraftRevision: number
+      changeReason: string
+    },
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/remote/mounts/${mountId}`, {
+    method: 'DELETE',
+    body: control,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  mcpAppArtifacts: (gatewayGroupId: string, signal?: AbortSignal) =>
+    apiRequest<McpAppArtifact[]>(
+      `${admin}/mcp/apps/artifacts?${new URLSearchParams({ gatewayGroupId })}`,
+      { signal },
+    ),
+  uploadMcpAppArtifact: (values: {
+    gatewayGroupId: string
+    appCode: string
+    version: string
+    displayName: string
+    resourceUri: string
+    mimeType: string
+    contentSecurityPolicy: string
+    permissions: string[]
+    allowedOrigins: string[]
+    expectedRevision: number
+    expectedDraftRevision: number
+    changeReason: string
+    artifact: File
+  }) => {
+    const form = new FormData()
+    Object.entries(values).forEach(([key, value]) => {
+      if (key === 'artifact') form.append(key, value as File)
+      else if (Array.isArray(value)) value.forEach((item) => form.append(key, item))
+      else form.append(key, String(value))
+    })
+    return apiRequest<McpMutationResult>(`${admin}/mcp/apps/artifacts/upload`, {
+      method: 'POST',
+      body: form,
+      idempotencyKey: newIdempotencyKey(),
+    })
+  },
+  revokeMcpAppArtifact: (
+    artifactId: string,
+    control: {
+      gatewayGroupId: string
+      expectedRevision: number
+      expectedDraftRevision: number
+      changeReason: string
+    },
+  ) => apiRequest<McpMutationResult>(`${admin}/mcp/apps/artifacts/${artifactId}`, {
+    method: 'DELETE',
+    body: control,
+    idempotencyKey: newIdempotencyKey(),
+  }),
+  mcpTasks: (tenantId: string, clientId?: string, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ tenantId })
+    if (clientId) params.set('clientId', clientId)
+    return apiRequest<McpTask[]>(`${admin}/mcp/tasks?${params}`, { signal })
+  },
+  cancelMcpTask: (taskId: string, expectedRevision: number) =>
+    apiRequest<{ cancelled: boolean }>(`${admin}/mcp/tasks/${taskId}/cancel`, {
+      method: 'POST',
+      body: { expectedRevision },
+      idempotencyKey: newIdempotencyKey(),
+    }),
+  issueMcpApproval: (request: {
+    serverCode: string
+    toolName: string
+    arguments: Record<string, unknown>
+    ttlSeconds: number
+  }) => apiRequest<McpApproval>(`${admin}/mcp/approvals`, {
+    method: 'POST',
+    body: request,
+  }),
+}
