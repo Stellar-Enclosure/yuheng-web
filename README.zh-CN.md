@@ -1,20 +1,34 @@
 # Yuheng Admin Web
 
-[English](README.md) | [Yuheng 概览](../README.md)
+[English](README.md) | [Yuheng 服务端](https://github.com/Stellar-Enclosure/yuheng-service/blob/main/README.zh-CN.md)
 
 Yuheng Admin Web 是独立的 React 管理控制台。它只调用 Yuheng Admin API，不直接调用
 Yuheng Engine 业务路由、Tianshu Admin 或 Provider 端点。
+
+## 功能页面
+
+| 领域 | 页面与功能 |
+|---|---|
+| 运行概览 | `/dashboard`、`/providers`：网关与 Provider 运行投影 |
+| 网关治理 | `/yuheng-groups` 及详情：分组、路由/策略草稿、校验与版本发布 |
+| 接口治理 | `/applications`、`/interface-catalog`、`/operations/:operationId`、`/openapi-sync`：应用/凭据、接口与 OpenAPI 同步 |
+| 发布 | 分组版本列表/详情：差异、状态、重试与回滚 |
+| MCP | `/mcp/servers`、Server 工作台、`/mcp/remote-providers`：服务、工具、资源/Prompt 与远程 Provider |
+| LLM | `/llm/configuration`：渠道与模型策略 |
+| 可观测 | `/observability/traces`、`/audit`：调用与管理审计 |
+
+路由以 [src/app/App.tsx](src/app/App.tsx) 为准。知识库与 Wiki 已由 [yaoguang-web](https://github.com/Stellar-Enclosure/yaoguang-web) 维护；本管理台可独立部署或通过 `VITE_BASE_PATH` 挂载到 Portal。
 
 ## 认证
 
 控制台不持有凭据或 Token。`src/auth/AuthContext.tsx` 使用
 `@stellar-enclosure/stellar-enclosure-web-shared` 的 `createGatewayAuthClient`；登录跳转到配置的 Edge OIDC
-registration（`/oauth2/authorization/edge-ui`）。Edge 在服务端保管 OAuth Token，并给浏览器
+registration（默认 `/oauth2/authorization/edge-yuheng`，可通过 `VITE_OAUTH_REGISTRATION_ID` 覆盖）。Edge 在服务端保管 OAuth Token，并给浏览器
 `HttpOnly` 会话 Cookie。浏览器读取 Edge BFF 会话，用其 CSRF 响应发起退出，并通过 Edge 会话发送后续
 API 请求；不会提交租户、用户名或密码，也不会保存 AT/RT。
 
 Actor 与 capabilities 来自 `GET /api/v1/auth/bootstrap`（`GatewayAuthBootstrapController`，该接口
-本身要求 `yuheng:read` 权限）。Provider 在挂载时、每次登录成功后调用它，并可通过
+本身仍要求 `yuheng:read` 权限）。通用管理路由要求 `yuheng:read`，MCP 还要求 `yuheng:mcp:read`，LLM 配置独立要求 `yuheng:llm:read`；但独立的 LLM 路由守卫不会绕过当前 bootstrap 的准入条件。Provider 在挂载时、每次登录成功后调用它，并可通过
 `refreshAuthorization()` 再次刷新。`CapabilityProvider` 把返回的 `permissions` 列表转成能力集合，
 `hasCapability` 同时接受 `*` 通配。退出登录通过 Edge BFF 的 CSRF 保护端点清理本地会话与授权状态。
 bootstrap 失败时 `RequireAuth` 跳转 `/login`，`RequireCapability` 依据同一列表渲染 403。Admin Web
