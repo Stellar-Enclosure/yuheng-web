@@ -60,3 +60,7 @@ Applications、OpenAPI Sync 与 MCP Resource/Prompt 页面使用完整的可选�
 
 不要把凭据写入并提交的 `.env` 文件。TLS 终止、Engine 侧针对非安全方法的 Cookie 可信 Origin
 白名单，以及 Yuheng Admin 授权策略仍由部署平台负责。
+
+## 独立仓库发布
+
+发布范围、前置配置、校验与发布命令见 [仓库 README](README.md#application-delivery-no-package-publication)。应用和测试示例不发布到 Maven Central，前端站点保持 `private: true`。
