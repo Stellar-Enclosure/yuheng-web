@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import {useMutation, useQuery, useQueryClient} from '@tanstack/react-query'
 import {
   Alert,
@@ -100,7 +101,8 @@ const modelToForm = (model?: LlmModel): ModelForm => ({
 export const LlmConfigurationPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
-  const canWrite = useCapability('yuheng:llm:write')
+  const canWriteFieldsWritable = useWritableFields('LlmChannelCommandDTO', 'LlmModelCommandDTO', 'LlmRouteBindingDTO')
+  const canWrite = useCapability('yuheng.button.LlmConfigurationPage.canWrite') && canWriteFieldsWritable
   const [channelDraft, setChannelDraft] = useState<{open: boolean; original?: LlmChannel}>({open: false})
   const [modelDraft, setModelDraft] = useState<{open: boolean; original?: LlmModel}>({open: false})
   const [channelForm] = Form.useForm<ChannelForm>()
@@ -475,7 +477,7 @@ export const LlmConfigurationPage = () => {
           layout="vertical"
           disabled={!canWrite || saveChannel.isPending}
           initialValues={channelToForm(channelDraft.original)}
-          onFinish={(values) => saveChannel.mutate({values, original: channelDraft.original})}
+          onFinish={(values) => {if (canWrite) { saveChannel.mutate({values, original: channelDraft.original}) }}}
         >
           <Form.Item
             name="key"
@@ -612,7 +614,7 @@ export const LlmConfigurationPage = () => {
           layout="vertical"
           disabled={!canWrite || saveModel.isPending}
           initialValues={modelToForm(modelDraft.original)}
-          onFinish={submitModel}
+          onFinish={values => {if (canWrite) submitModel(values)}}
         >
           {embeddingRouteRejected && (
             <Alert

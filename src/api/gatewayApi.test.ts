@@ -1,4 +1,5 @@
-import { afterEach, describe, expect, it, vi } from 'vitest'
+import {workspaceAuth} from '../auth/authTransport'
+import { beforeEach, afterEach, describe, expect, it, vi } from 'vitest'
 import { gatewayApi } from './gatewayApi'
 import { gatewayEngineRoleOf, normalizeEngineMetadata } from './types'
 
@@ -8,7 +9,12 @@ const jsonResponse = (body: unknown) =>
     headers: { 'Content-Type': 'application/json' },
   })
 
+beforeEach(() => {
+  vi.spyOn(workspaceAuth.yuheng, 'csrf').mockResolvedValue({headerName: 'X-CSRF-TOKEN', token: 'csrf-test', expiresAt: new Date(Date.now() + 60_000).toISOString()})
+})
+
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.unstubAllGlobals()
 })
 
@@ -41,8 +47,8 @@ describe('yuheng API response adapters', () => {
     expect(nodes[1].metadata).toEqual({ 'yuheng.engine.role': 'MCP' })
     expect((await gatewayApi.consistency('group-1')).nodes).toEqual([state])
     expect(fetchMock.mock.calls.map(([url]) => url)).toEqual([
-      '/api/v1/yuheng/admin/yuheng-groups/group-1/engine-nodes',
-      '/api/v1/yuheng/admin/yuheng-groups/group-1/runtime-consistency',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/yuheng-groups/group-1/engine-nodes',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/yuheng-groups/group-1/runtime-consistency',
     ])
   })
   it('loads OpenAPI sync states with encoded scope filters and immutable reads', async () => {
@@ -104,13 +110,13 @@ describe('yuheng API response adapters', () => {
     await gatewayApi.openapiSnapshotDocument('snapshot-1')
 
     expect(fetchMock.mock.calls[0][0]).toBe(
-      '/api/v1/yuheng/admin/openapi/sync-states?bizCode=retail&namespace=ops&env=test&appCode=orders',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/openapi/sync-states?bizCode=retail&namespace=ops&env=test&appCode=orders',
     )
     expect(fetchMock.mock.calls[1][0]).toBe(
-      '/api/v1/yuheng/admin/operations/operation-1/openapi',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/operations/operation-1/openapi',
     )
     expect(fetchMock.mock.calls[2][0]).toBe(
-      '/api/v1/yuheng/admin/openapi/snapshots/snapshot-1/document',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/openapi/snapshots/snapshot-1/document',
     )
     expect(fetchMock.mock.calls.every(([, request]) => (request as RequestInit).method === undefined)).toBe(true)
   })
@@ -122,7 +128,7 @@ describe('yuheng API response adapters', () => {
     await gatewayApi.scopes()
 
     expect(fetchMock).toHaveBeenCalledOnce()
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/yuheng/admin/scopes')
+    expect(fetchMock.mock.calls[0][0]).toBe('/apps/edge-yuheng/api/v1/yuheng/admin/scopes')
   })
 
   it('loads groups across scopes and applications with optional page-local filters', async () => {
@@ -133,11 +139,11 @@ describe('yuheng API response adapters', () => {
     await gatewayApi.applications({ bizCode: 'retail', env: 'prod' })
     await gatewayApi.applications()
 
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/yuheng/admin/yuheng-groups')
+    expect(fetchMock.mock.calls[0][0]).toBe('/apps/edge-yuheng/api/v1/yuheng/admin/yuheng-groups')
     expect(fetchMock.mock.calls[1][0]).toBe(
-      '/api/v1/yuheng/admin/applications?bizCode=retail&env=prod',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/applications?bizCode=retail&env=prod',
     )
-    expect(fetchMock.mock.calls[2][0]).toBe('/api/v1/yuheng/admin/applications')
+    expect(fetchMock.mock.calls[2][0]).toBe('/apps/edge-yuheng/api/v1/yuheng/admin/applications')
   })
 
   it('loads an application detail through the Yuheng application controller path', async () => {
@@ -155,7 +161,7 @@ describe('yuheng API response adapters', () => {
 
     await gatewayApi.application('application-1')
 
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/yuheng/admin/applications/application-1')
+    expect(fetchMock.mock.calls[0][0]).toBe('/apps/edge-yuheng/api/v1/yuheng/admin/applications/application-1')
   })
 
   it('loads MCP operation options from the selected application catalog only', async () => {
@@ -192,7 +198,7 @@ describe('yuheng API response adapters', () => {
 
     expect(fetchMock).toHaveBeenCalledOnce()
     expect(fetchMock.mock.calls[0][0]).toBe(
-      '/api/v1/yuheng/admin/applications/application-1/catalog',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/applications/application-1/catalog',
     )
   })
 
@@ -378,10 +384,10 @@ describe('yuheng API response adapters', () => {
     await gatewayApi.mcpRemoteTools('group-1', 'server-1')
 
     expect(fetchMock.mock.calls[0][0]).toBe(
-      '/api/v1/yuheng/admin/mcp/groups/group-1/managed-tools?serverId=server-1',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/mcp/groups/group-1/managed-tools?serverId=server-1',
     )
     expect(fetchMock.mock.calls[1][0]).toBe(
-      '/api/v1/yuheng/admin/mcp/remote-tools?gatewayGroupId=group-1&serverId=server-1',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/mcp/remote-tools?gatewayGroupId=group-1&serverId=server-1',
     )
   })
 
@@ -406,7 +412,7 @@ describe('yuheng API response adapters', () => {
     })
 
     expect(fetchMock.mock.calls[0][0]).toBe(
-      '/api/v1/yuheng/admin/mcp/managed-tools/tool-1/override',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/mcp/managed-tools/tool-1/override',
     )
     const request = fetchMock.mock.calls[0][1] as RequestInit
     expect(request.method).toBe('PUT')
@@ -448,9 +454,9 @@ describe('yuheng API response adapters', () => {
     await gatewayApi.deprecateOperation('op-1')
 
     expect(fetchMock.mock.calls.map(([path]) => path)).toEqual([
-      '/api/v1/yuheng/admin/operations/op-1/metadata',
-      '/api/v1/yuheng/admin/operations/op-1/manual-definition',
-      '/api/v1/yuheng/admin/operations/op-1/deprecate',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/operations/op-1/metadata',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/operations/op-1/manual-definition',
+      '/apps/edge-yuheng/api/v1/yuheng/admin/operations/op-1/deprecate',
     ])
     expect(JSON.parse(String((fetchMock.mock.calls[0][1] as RequestInit).body))).toEqual({
       summary: 'Orders',
@@ -470,8 +476,8 @@ describe('yuheng API response adapters', () => {
 
     await expect(gatewayApi.releaseDiff('release-1')).resolves.toEqual({routes: {changed: 1}})
     await expect(gatewayApi.validateMcpCapability('prompts', 'prompt-1', 'group-1')).resolves.toEqual({valid: true, findings: []})
-    expect(fetchMock.mock.calls[0][0]).toBe('/api/v1/yuheng/admin/releases/release-1/diff')
-    expect(fetchMock.mock.calls[1][0]).toBe('/api/v1/yuheng/admin/mcp/prompts/prompt-1/validate?gatewayGroupId=group-1')
+    expect(fetchMock.mock.calls[0][0]).toBe('/apps/edge-yuheng/api/v1/yuheng/admin/releases/release-1/diff')
+    expect(fetchMock.mock.calls[1][0]).toBe('/apps/edge-yuheng/api/v1/yuheng/admin/mcp/prompts/prompt-1/validate?gatewayGroupId=group-1')
     expect((fetchMock.mock.calls[1][1] as RequestInit).method).toBe('POST')
   })
 })

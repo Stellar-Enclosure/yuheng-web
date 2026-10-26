@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -83,8 +84,10 @@ export const ApplicationsPage = () => {
   const filters = readScopeSearchParams(searchParams, ['bizCode', 'namespace', 'env', 'appCode'])
   const bindings = useGatewayScopeBindings()
   const queryClient = useQueryClient()
-  const canWrite = useCapability('yuheng:applications:write')
-  const canWriteCredential = useCapability('yuheng:credentials:write')
+  const canWriteFieldsWritable = useWritableFields('GatewayApplicationCreateRequestDTO', 'GatewayApplicationUpdateRequestDTO')
+  const canWrite = useCapability('yuheng.button.ApplicationsPage.canWrite') && canWriteFieldsWritable
+  const canWriteCredentialFieldsWritable = useWritableFields('GatewayCredentialRotateRequestDTO')
+  const canWriteCredential = useCapability('yuheng.button.ApplicationsPage.canWriteCredential') && canWriteCredentialFieldsWritable
   const [form] = Form.useForm()
   const [editing, setEditing] = useState<Application>()
   const [application, setApplication] = useState<Application>()
@@ -339,7 +342,7 @@ export const ApplicationsPage = () => {
         destroyOnHidden
       >
         {save.error && <QueryFailure error={save.error} />}
-        <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={(values) => {if (canWrite) { save.mutate(values) }}}>
           {!editing?.id && (
             <Form.Item name="bindingId" label="Scope Binding" rules={[{ required: true }]}>
               <Select

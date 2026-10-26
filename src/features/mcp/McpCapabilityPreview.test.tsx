@@ -1,3 +1,5 @@
+import {resources} from '../../permissions/resources'
+import {evaluateRequirement} from '@stellar-enclosure/stellar-enclosure-web-shared/permissions'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { cleanup, render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -11,7 +13,10 @@ vi.mock('../../api/gatewayApi', () => ({
   gatewayApi: { previewMcpServer: mocks.preview, validateMcpServer: mocks.validate },
 }))
 vi.mock('../../app/capabilities', () => ({
-  useCapability: (permission: string) => mocks.permissions.has(permission),
+  useCapability: (key: string) => {
+    const resource = resources.find(value => value.key === key)
+    return evaluateRequirement(resource && 'requirement' in resource ? resource.requirement : null, mocks.permissions)
+  },
 }))
 vi.mock('react-router-dom', () => ({ useNavigate: () => mocks.navigate }))
 

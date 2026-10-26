@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -39,7 +40,8 @@ export const McpServersPage = () => {
   const filters = readScopeSearchParams(searchParams, ['env', 'namespace'])
   const navigate = useNavigate()
   const queryClient = useQueryClient()
-  const canWrite = useCapability('yuheng:mcp:write')
+  const canWriteFieldsWritable = useWritableFields('McpServerRequestDTO', 'McpServerMutationRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpServersPage.canWrite') && canWriteFieldsWritable
   const [selectedGroupId, setSelectedGroupId] = useState('')
   const [editing, setEditing] = useState<McpServer>()
   const [modalOpen, setModalOpen] = useState(false)
@@ -217,7 +219,7 @@ export const McpServersPage = () => {
         destroyOnHidden
       >
         {save.error && <QueryFailure error={save.error} />}
-        <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={(values) => {if (canWrite) { save.mutate(values) }}}>
           <Form.Item name="serverCode" label="Server Code" rules={[{ required: true }]}>
             <Input disabled={Boolean(editing)} />
           </Form.Item>

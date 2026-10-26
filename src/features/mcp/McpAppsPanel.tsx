@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -51,7 +52,8 @@ export const McpAppsPanel = ({ serverId, gatewayGroupId, draftRevision }: {
   gatewayGroupId: string
   draftRevision: number
 }) => {
-  const canWrite = useCapability('yuheng:mcp:write')
+  const canWriteFieldsWritable = useWritableFields('McpArtifactUploadCommandDTO', 'McpCapabilityRequestDTO', 'McpServerMutationRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpAppsPanel.canWrite') && canWriteFieldsWritable
   const queryClient = useQueryClient()
   const bindings = useMcpCapabilityCollection(
     'app-bindings',
@@ -260,7 +262,7 @@ export const McpAppsPanel = ({ serverId, gatewayGroupId, draftRevision }: {
         destroyOnHidden
       >
         {upload.error && <QueryFailure error={upload.error} />}
-        <Form form={artifactForm} layout="vertical" onFinish={(values) => upload.mutate(values)}>
+        <Form disabled={!canWrite} form={artifactForm} layout="vertical" onFinish={(values) => {if (canWrite) { upload.mutate(values) }}}>
           <Form.Item name="appCode" label="App Code" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="version" label="Version" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="displayName" label="显示名称" rules={[{ required: true }]}><Input /></Form.Item>
@@ -276,7 +278,7 @@ export const McpAppsPanel = ({ serverId, gatewayGroupId, draftRevision }: {
           </Form.Item>
           <Form.Item name="allowedOrigins" label="Allowed Origins（逗号分隔）"><Input /></Form.Item>
           <Form.Item label="HTML Artifact" required>
-            <Upload
+            <Upload disabled={!canWrite}
               accept="text/html,.html"
               maxCount={1}
               beforeUpload={() => false}
@@ -314,7 +316,7 @@ export const McpAppsPanel = ({ serverId, gatewayGroupId, draftRevision }: {
         destroyOnHidden
       >
         {bindings.save.error && <QueryFailure error={bindings.save.error} />}
-        <Form form={bindingForm} layout="vertical" onFinish={saveBinding}>
+        <Form disabled={!canWrite} form={bindingForm} layout="vertical" onFinish={values => {if (canWrite) saveBinding(values)}}>
           <Form.Item name="name" label="App Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="appArtifactId" label="Artifact" rules={[{ required: true }]}>
             <Select options={(artifacts.data ?? []).map((artifact) => ({

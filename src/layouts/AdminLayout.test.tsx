@@ -1,3 +1,4 @@
+import {authorizationFixture} from '../test/permissionFixtures'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import {cleanup, render, screen} from '@testing-library/react'
 import {MemoryRouter, Route, Routes} from 'react-router-dom'
@@ -13,14 +14,11 @@ type WujieTestWindow = Window & { $wujie?: { props?: { embedded?: boolean } } }
 
 vi.mock('../auth/AuthContext', () => ({
   useAuth: () => ({
-      authorization: {user: {identitySub: 'Admin'}},
+      authorization: authorizationFixture('yuheng', ['yuheng:read', 'yuheng:llm:read', ...(mocks.mcp ? ['yuheng:mcp:read'] : [])]),
     logout: mocks.logout,
   }),
 }))
 
-vi.mock('../app/capabilities', () => ({
-  useCapability: (capability: string) => capability === 'yuheng:mcp:read' ? mocks.mcp : true,
-}))
 
 const renderLayout = (path = '/dashboard', embedded = false) => {
   ;(window as WujieTestWindow).$wujie = embedded ? {props: {embedded: true}} : undefined
@@ -72,7 +70,7 @@ describe('AdminLayout', () => {
     expect(screen.getByRole('navigation', {name: '主菜单'})).toBeInTheDocument()
     expect(screen.queryByRole('menu', {name: '主导航'})).not.toBeInTheDocument()
     expect(screen.getByText('Admin API')).toBeInTheDocument()
-    expect(screen.getByText('Admin')).toBeInTheDocument()
+    expect(screen.getByText('user-a')).toBeInTheDocument()
     expect(screen.getByText('版本 v0.0.1')).toBeInTheDocument()
     expect(screen.getByText('Dashboard')).toBeInTheDocument()
     expect(screen.queryByLabelText('业务域')).not.toBeInTheDocument()

@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Form, Input, Modal, Space, Steps, Table, Typography, message } from 'antd'
 import { useState } from 'react'
@@ -13,7 +14,8 @@ import { StatusTag } from '../../components/StatusTag'
 export const ReleasesPage = () => {
   const { groupId = '' } = useParams()
   const queryClient = useQueryClient()
-  const canPublish = useCapability('yuheng:releases:write')
+  const canPublishFieldsWritable = useWritableFields('GatewayReleaseCreateRequestDTO')
+  const canPublish = useCapability('yuheng.button.ReleasesPage.canPublish') && canPublishFieldsWritable
   const [open, setOpen] = useState(false)
   const [reason, setReason] = useState('')
   const [trace] = useState(() => createLogicalTrace())
@@ -76,8 +78,8 @@ export const ReleasesPage = () => {
         open={open}
         width={760}
         onCancel={() => setOpen(false)}
-        onOk={() => publish.mutate()}
-        okButtonProps={{ disabled: !valid || !reason.trim() }}
+        onOk={() => {if (canPublish) publish.mutate()}}
+        okButtonProps={{ disabled: !canPublish || !valid || !reason.trim() }}
         confirmLoading={publish.isPending}
       >
         <Steps
@@ -93,7 +95,7 @@ export const ReleasesPage = () => {
         )}
         {diff.data && <JsonPanel title="与基线的结构化 Diff" value={diff.data} />}
         <Form.Item label="变更说明" required className="section-row">
-          <Input.TextArea value={reason} onChange={(event) => setReason(event.target.value)} rows={3} />
+          <Input.TextArea disabled={!canPublish} value={reason} onChange={(event) => setReason(event.target.value)} rows={3} />
         </Form.Item>
       </Modal>
     </section>

@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useQuery } from '@tanstack/react-query'
 import {
   Alert,
@@ -45,7 +46,8 @@ export const McpPromptsPanel = ({ serverId, gatewayGroupId, draftRevision }: {
 }) => {
   const [searchParams, setSearchParams] = useSearchParams()
   const scope = readScopeSearchParams(searchParams, ['bizCode', 'namespace', 'env', 'appCode'], 'prompt')
-  const canWrite = useCapability('yuheng:mcp:write')
+  const canWriteFieldsWritable = useWritableFields('McpCapabilityRequestDTO', 'McpServerMutationRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpPromptsPanel.canWrite') && canWriteFieldsWritable
   const collection = useMcpCapabilityCollection('prompts', serverId, gatewayGroupId, draftRevision)
   const applications = useQuery({
     queryKey: ['mcp-applications', scope],
@@ -201,7 +203,7 @@ export const McpPromptsPanel = ({ serverId, gatewayGroupId, draftRevision }: {
         destroyOnHidden
       >
         {collection.save.error && <QueryFailure error={collection.save.error} />}
-        <Form form={form} layout="vertical" onFinish={submit}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={values => {if (canWrite) submit(values)}}>
           <Form.Item name="name" label="Prompt Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="description" label="描述"><Input.TextArea /></Form.Item>
           <Form.Item name="sourceType" label="来源" rules={[{ required: true }]}>

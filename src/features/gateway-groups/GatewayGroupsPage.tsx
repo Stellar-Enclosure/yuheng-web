@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Button, Form, Input, Modal, Popconfirm, Select, Space, Table, Typography, message } from 'antd'
 import { useState } from 'react'
@@ -17,7 +18,8 @@ export const GatewayGroupsPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const queryClient = useQueryClient()
   const bindings = useGatewayScopeBindings()
-  const canWrite = useCapability('yuheng:groups:write')
+  const canWriteFieldsWritable = useWritableFields('GatewayGroupCreateRequestDTO', 'GatewayGroupUpdateRequestDTO')
+  const canWrite = useCapability('yuheng.button.GatewayGroupsPage.canWrite') && canWriteFieldsWritable
   const [form] = Form.useForm()
   const [editing, setEditing] = useState<GatewayGroup>()
   const filters = readScopeSearchParams(searchParams, ['env', 'namespace'])
@@ -134,7 +136,7 @@ export const GatewayGroupsPage = () => {
         confirmLoading={save.isPending}
         destroyOnHidden
       >
-        <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={(values) => {if (canWrite) { save.mutate(values) }}}>
           {!editing?.id && (
             <Form.Item name="gatewayGroupCode" label="Group Code" rules={[{ required: true }]}>
               <Input />

@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { Alert, Button, Card, Descriptions, Drawer, Input, Modal, Space, Table, Tabs, Typography, message } from 'antd'
 import { useEffect, useState } from 'react'
@@ -14,8 +15,9 @@ import { shouldPollRelease } from './releaseState'
 export const ReleaseDetailPage = () => {
   const { groupId = '', releaseId = '' } = useParams()
   const queryClient = useQueryClient()
-  const canPublish = useCapability('yuheng:releases:write')
-  const canRollback = useCapability('yuheng:releases:write')
+  const canPublish = useCapability('yuheng.button.ReleaseDetailPage.canPublish')
+  const canRollbackFieldsWritable = useWritableFields('GatewayReleaseRollbackRequestDTO')
+  const canRollback = useCapability('yuheng.button.ReleaseDetailPage.canRollback') && canRollbackFieldsWritable
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
   const [rollbackOpen, setRollbackOpen] = useState(false)
   const [diffOpen, setDiffOpen] = useState(false)
@@ -176,12 +178,12 @@ export const ReleaseDetailPage = () => {
         title="创建回滚 Release"
         open={rollbackOpen}
         onCancel={() => setRollbackOpen(false)}
-        onOk={() => rollback.mutate()}
-        okButtonProps={{ danger: true, disabled: !reason.trim() || !draft.data }}
+        onOk={() => {if (canRollback) rollback.mutate()}}
+        okButtonProps={{ danger: true, disabled: !canRollback || !reason.trim() || !draft.data }}
         confirmLoading={rollback.isPending}
       >
         <Alert type="warning" showIcon title="回滚不会修改历史 Release，而会基于目标内容创建新的 Release。" />
-        <Input.TextArea className="section-row" rows={4} placeholder="必填变更原因" value={reason} onChange={(event) => setReason(event.target.value)} />
+        <Input.TextArea disabled={!canRollback} className="section-row" rows={4} placeholder="必填变更原因" value={reason} onChange={(event) => setReason(event.target.value)} />
       </Modal>
     </section>
   )

@@ -5,24 +5,27 @@ import { extname, join, normalize } from 'node:path'
 
 const port = Number.parseInt(process.env.PORT ?? '8080', 10)
 const apiBase = new URL(
-  process.env.YUHENG_ADMIN_API_BASE_URL ?? 'http://yuheng-admin:18080',
+  process.env.YUHENG_EDGE_BASE_URL ?? process.env.YUHENG_ADMIN_API_BASE_URL ?? 'http://edge:18180',
 )
+const appAliases = [process.env.YUHENG_EDGE_APP_ALIAS ?? 'edge-yuheng', process.env.YAOGUANG_EDGE_APP_ALIAS ?? 'edge-yaoguang']
+if (appAliases.some(alias => !/^[a-z][a-z0-9-]{0,63}$/.test(alias))) throw new Error('Invalid Edge application alias')
+const applicationPaths = appAliases.map(alias => `/apps/${alias}/`)
 const developmentPlaintext =
   process.env.YUHENG_ADMIN_API_DEVELOPMENT_PLAINTEXT === 'true'
 const tlsFile = (name) => {
   const path = process.env[name]
   if (!path) {
-    throw new Error(`${name} is required for Yuheng Admin mTLS`)
+    throw new Error(`${name} is required for Edge mTLS`)
   }
   return readFileSync(path)
 }
 if (apiBase.protocol === 'http:' && !developmentPlaintext) {
   throw new Error(
-    'Yuheng Admin plaintext requires explicit development configuration',
+    'Edge plaintext requires explicit development configuration',
   )
 }
 if (!['http:', 'https:'].includes(apiBase.protocol)) {
-  throw new Error('Yuheng Admin API must use HTTP or HTTPS')
+  throw new Error('Edge origin must use HTTP or HTTPS')
 }
 const apiTls = apiBase.protocol === 'https:'
   ? {
@@ -34,6 +37,11 @@ const apiTls = apiBase.protocol === 'https:'
     }
   : {}
 const root = '/app/dist'
+const buildEvidence = JSON.parse(readFileSync(join(root, 'permission-build.json'), 'utf8'))
+if (buildEvidence.schemaVersion !== 1 || buildEvidence.producerId !== 'yuheng-web'
+    || buildEvidence.application?.businessCode !== 'xingyuan' || buildEvidence.application?.applicationCode !== 'yuheng') {
+  throw new Error('A verified yuheng-web permission build is required')
+}
 const contentTypes = new Map([
   ['.css', 'text/css; charset=utf-8'],
   ['.html', 'text/html; charset=utf-8'],
@@ -76,7 +84,7 @@ const serve = (incoming, outgoing) => {
     outgoing.end('ok')
     return
   }
-  if (incoming.url?.startsWith('/api/')) {
+  if (applicationPaths.some(path => incoming.url?.startsWith(path))) {
     proxy(incoming, outgoing)
     return
   }

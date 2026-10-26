@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -39,8 +40,9 @@ export const McpTasksPanel = ({ serverId, gatewayGroupId, draftRevision }: {
   gatewayGroupId: string
   draftRevision: number
 }) => {
-  const canWrite = useCapability('yuheng:mcp:write')
-  const canReadRuntime = useCapability('yuheng:mcp:runtime:read')
+  const canWriteFieldsWritable = useWritableFields('McpCapabilityRequestDTO', 'McpServerMutationRequestDTO', 'McpTaskCancelRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpTasksPanel.canWrite') && canWriteFieldsWritable
+  const canReadRuntime = useCapability('yuheng.button.McpTasksPanel.canReadRuntime')
   const queryClient = useQueryClient()
   const collection = useMcpCapabilityCollection(
     'task-policies',
@@ -253,7 +255,7 @@ export const McpTasksPanel = ({ serverId, gatewayGroupId, draftRevision }: {
         destroyOnHidden
       >
         {collection.save.error && <QueryFailure error={collection.save.error} />}
-        <Form form={form} layout="vertical" onFinish={submit}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={values => {if (canWrite) submit(values)}}>
           <Form.Item name="toolName" label="Tool" rules={[{ required: true }]}>
             <Select
               disabled={Boolean(editing)}

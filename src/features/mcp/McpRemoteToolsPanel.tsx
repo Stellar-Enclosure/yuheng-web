@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -41,7 +42,8 @@ export const McpRemoteToolsPanel = ({ serverId, gatewayGroupId, draftRevision }:
   gatewayGroupId: string
   draftRevision: number
 }) => {
-  const canWrite = useCapability('yuheng:mcp:write')
+  const canWriteFieldsWritable = useWritableFields('McpRemoteToolRequestDTO', 'McpToolMutationRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpRemoteToolsPanel.canWrite') && canWriteFieldsWritable
   const queryClient = useQueryClient()
   const [messageApi, messageContext] = message.useMessage()
   const [form] = Form.useForm<RemoteToolForm>()
@@ -227,7 +229,7 @@ export const McpRemoteToolsPanel = ({ serverId, gatewayGroupId, draftRevision }:
         destroyOnHidden
       >
         {save.error && <QueryFailure error={save.error} />}
-        <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={(values) => {if (canWrite) { save.mutate(values) }}}>
           <Form.Item name="name" label="Tool Name" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="description" label="描述"><Input.TextArea /></Form.Item>
           <Form.Item name="remoteMountId" label="Remote Mount" rules={[{ required: true }]}>

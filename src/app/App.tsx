@@ -5,6 +5,7 @@ import {lazy, Suspense, useEffect, type ReactNode} from 'react'
 import {createBrowserRouter, Navigate, Outlet, RouterProvider} from 'react-router-dom'
 import {CapabilityProvider, type Capability} from './capabilities'
 import {AuthProvider} from '../auth/AuthContext'
+import {FieldCatalogProvider} from '../permissions/FieldCatalog'
 import {LoginPage} from '../auth/LoginPage'
 import {RequireAuth, RequireCapability} from '../auth/RouteGuards'
 import {LoadingBlock} from '../components/QueryState'
@@ -117,85 +118,39 @@ const WorkspaceAuthBoundary = () => {
   }, [resource])
   return (
     <AuthProvider key={resource} resource={resource}>
-      <CapabilityProvider><Outlet /></CapabilityProvider>
+      <FieldCatalogProvider><CapabilityProvider><Outlet /></CapabilityProvider></FieldCatalogProvider>
     </AuthProvider>
   )
 }
 
 const router = createBrowserRouter([{element: <WorkspaceAuthBoundary />, children: [
-  { path: '/login', element: <LoginPage /> },
+  {path: '/login', element: <LoginPage />},
   {
     path: '/',
     element: <RequireAuth><AdminLayout /></RequireAuth>,
     errorElement: <Result status="error" title="页面加载失败" subTitle="请返回上一页或刷新。" />,
     children: [
-      {
-        path: 'llm/configuration',
-        element: guarded('yuheng:llm:read', <LlmConfigurationPage />),
-      },
-    ],
-  },
-  {
-    path: '/',
-    element: (
-      <RequireAuth>
-        <RequireCapability capability="yuheng:read">
-          <AdminLayout />
-        </RequireCapability>
-      </RequireAuth>
-    ),
-    errorElement: <Result status="error" title="页面加载失败" subTitle="请返回上一页或刷新。" />,
-    children: [
-      { index: true, element: <Navigate replace to="/dashboard" /> },
-      { path: 'dashboard', element: <DashboardPage /> },
-      { path: 'yuheng-groups', element: <GatewayGroupsPage /> },
-      {
-        path: 'applications',
-        element: <RequireCapability capability="yuheng:read"><ApplicationsPage /></RequireCapability>,
-      },
-      { path: 'openapi-sync', element: <OpenApiSyncPage /> },
-      { path: 'yuheng-groups/:groupId/overview', element: <GatewayGroupDetailPage /> },
-      { path: 'yuheng-groups/:groupId/draft/routes', element: <DraftPage /> },
-      { path: 'yuheng-groups/:groupId/draft/policies', element: <DraftPage /> },
-      { path: 'yuheng-groups/:groupId/releases', element: <ReleasesPage /> },
-      {
-        path: 'yuheng-groups/:groupId/releases/:releaseId',
-        element: <ReleaseDetailPage />,
-      },
-      { path: 'interface-catalog', element: <CatalogPage /> },
-      { path: 'applications/:applicationId/catalog', element: <CatalogPage /> },
-      { path: 'operations/:operationId', element: <OperationPage /> },
-      { path: 'providers', element: <ProvidersPage /> },
-      {
-        path: 'mcp/servers',
-        element: (
-          <RequireCapability capability="yuheng:mcp:read">
-            <McpServersPage />
-          </RequireCapability>
-        ),
-      },
-      {
-        path: 'mcp/servers/:serverId',
-        element: (
-          <RequireCapability capability="yuheng:mcp:read">
-            <McpServerWorkbenchPage />
-          </RequireCapability>
-        ),
-      },
-      {
-        path: 'mcp/remote-providers',
-        element: (
-          <RequireCapability capability="yuheng:mcp:read">
-            <McpRemoteProvidersPage />
-          </RequireCapability>
-        ),
-      },
-      { path: 'observability/traces', element: <TracesPage /> },
-      {
-        path: 'audit',
-        element: <RequireCapability capability="yuheng:read"><AuditPage /></RequireCapability>,
-      },
-      { path: '*', element: <Result status="404" title="404" subTitle="页面不存在" /> },
+      {index: true, element: <Navigate replace to="/dashboard" />},
+      {path: 'dashboard', element: guarded('yuheng.page.dashboard', <DashboardPage />)},
+      {path: 'yuheng-groups', element: guarded('yuheng.page.yuheng.groups', <GatewayGroupsPage />)},
+      {path: 'applications', element: guarded('yuheng.page.applications', <ApplicationsPage />)},
+      {path: 'openapi-sync', element: guarded('yuheng.page.openapi.sync', <OpenApiSyncPage />)},
+      {path: 'yuheng-groups/:groupId/overview', element: guarded('yuheng.page.yuheng.groups.groupId.overview', <GatewayGroupDetailPage />)},
+      {path: 'yuheng-groups/:groupId/draft/routes', element: guarded('yuheng.page.yuheng.groups.groupId.draft.routes', <DraftPage />)},
+      {path: 'yuheng-groups/:groupId/draft/policies', element: guarded('yuheng.page.yuheng.groups.groupId.draft.policies', <DraftPage />)},
+      {path: 'yuheng-groups/:groupId/releases', element: guarded('yuheng.page.yuheng.groups.groupId.releases', <ReleasesPage />)},
+      {path: 'yuheng-groups/:groupId/releases/:releaseId', element: guarded('yuheng.page.yuheng.groups.groupId.releases.releaseId', <ReleaseDetailPage />)},
+      {path: 'interface-catalog', element: guarded('yuheng.page.interface.catalog', <CatalogPage />)},
+      {path: 'applications/:applicationId/catalog', element: guarded('yuheng.page.applications.applicationId.catalog', <CatalogPage />)},
+      {path: 'operations/:operationId', element: guarded('yuheng.page.operations.operationId', <OperationPage />)},
+      {path: 'providers', element: guarded('yuheng.page.providers', <ProvidersPage />)},
+      {path: 'mcp/servers', element: guarded('yuheng.page.mcp.servers', <McpServersPage />)},
+      {path: 'mcp/servers/:serverId', element: guarded('yuheng.page.mcp.servers.serverId', <McpServerWorkbenchPage />)},
+      {path: 'mcp/remote-providers', element: guarded('yuheng.page.mcp.remote.providers', <McpRemoteProvidersPage />)},
+      {path: 'observability/traces', element: guarded('yuheng.page.observability.traces', <TracesPage />)},
+      {path: 'audit', element: guarded('yuheng.page.audit', <AuditPage />)},
+      {path: 'llm/configuration', element: guarded('yuheng.page.llm.configuration', <LlmConfigurationPage />)},
+      {path: '*', element: <Result status="404" title="404" subTitle="页面不存在" />},
     ],
   },
 ]}], {basename: basePath})

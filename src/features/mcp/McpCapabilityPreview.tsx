@@ -11,7 +11,7 @@ export const McpCapabilityPreview = ({ serverId, gatewayGroupId }: {
   gatewayGroupId: string
 }) => {
   const navigate = useNavigate()
-  const canPublish = useCapability('yuheng:releases:write')
+  const canPublish = useCapability('yuheng.button.McpCapabilityPreview.canPublish')
   const preview = useQuery({
     queryKey: ['mcp-capability-preview', serverId],
     queryFn: ({ signal }) => gatewayApi.previewMcpServer(serverId, signal),

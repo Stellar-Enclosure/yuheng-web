@@ -1,46 +1,15 @@
-import {createContext, type PropsWithChildren, useContext, useMemo} from 'react'
+import {type PropsWithChildren} from 'react'
+import {usePermission} from '@stellar-enclosure/stellar-enclosure-web-shared/react-permissions'
+import type {ResourceKey} from '@stellar-enclosure/stellar-enclosure-web-shared/permissions'
 import {useAuth} from '../auth/AuthContext'
+import {resources} from '../permissions/resources'
 
-export type Capability =
-  | 'yuheng:read'
-  | 'yuheng:groups:write'
-  | 'yuheng:applications:write'
-  | 'yuheng:credentials:write'
-  | 'yuheng:catalog:write'
-  | 'yuheng:drafts:write'
-  | 'yuheng:releases:write'
-  | 'yuheng:mcp:read'
-  | 'yuheng:mcp:write'
-  | 'yuheng:mcp:test'
-  | 'yuheng:mcp:approve'
-  | 'yuheng:mcp:runtime:read'
-  | 'yuheng:knowledge:read'
-  | 'yuheng:knowledge:write'
-  | 'yuheng:knowledge:admin'
-  | 'yuheng:llm:read'
-  | 'yuheng:llm:write'
+export type Capability = ResourceKey<typeof resources>
+export const CapabilityProvider = ({children}: PropsWithChildren) => children
 
-const CapabilityContext = createContext<ReadonlySet<string>>(new Set())
-
-export const CapabilityProvider = ({ children }: PropsWithChildren) => {
-    const {authorization} = useAuth()
-  const capabilities = useMemo(
-      () => new Set(authorization?.permissions ?? []),
-      [authorization],
-  )
-  return (
-    <CapabilityContext.Provider value={capabilities}>
-      {children}
-    </CapabilityContext.Provider>
-  )
+export const useCapability = (resourceKey: Capability): boolean => {
+  const {authorization} = useAuth()
+  const permission = usePermission(authorization?.snapshot ?? null, authorization?.binding ?? null)
+  const resource = resources.find(value => value.key === resourceKey)
+  return resource ? permission.allows('requirement' in resource ? resource.requirement : {access: resource.access}) : false
 }
-
-export const useCapability = (capability: Capability): boolean => {
-  const capabilities = useContext(CapabilityContext)
-  return hasCapability(capabilities, capability)
-}
-
-export const hasCapability = (
-  capabilities: ReadonlySet<string>,
-  capability: Capability,
-): boolean => capabilities.has(capability) || capabilities.has('*')

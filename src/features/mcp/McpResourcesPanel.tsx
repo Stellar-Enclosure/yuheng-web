@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useQuery } from '@tanstack/react-query'
 import {
   Button,
@@ -69,7 +70,8 @@ export const McpResourcesPanel = ({ serverId, gatewayGroupId, draftRevision }: {
 }) => {
   const [searchParams, setSearchParams] = useSearchParams()
   const scope = readScopeSearchParams(searchParams, ['bizCode', 'namespace', 'env', 'appCode'], 'resource')
-  const canWrite = useCapability('yuheng:mcp:write')
+  const canWriteFieldsWritable = useWritableFields('McpCapabilityRequestDTO', 'McpServerMutationRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpResourcesPanel.canWrite') && canWriteFieldsWritable
   const resources = useMcpCapabilityCollection('resources', serverId, gatewayGroupId, draftRevision)
   const templates = useMcpCapabilityCollection(
     'resource-templates',
@@ -258,7 +260,7 @@ export const McpResourcesPanel = ({ serverId, gatewayGroupId, draftRevision }: {
         destroyOnHidden
       >
         {state.save.error && <QueryFailure error={state.save.error} />}
-        <Form form={form} layout="vertical" onFinish={submit}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={values => {if (canWrite) submit(values)}}>
           <Form.Item name="kind" hidden><Input /></Form.Item>
           <Form.Item name="name" label="Name" rules={[{ required: true }]}><Input /></Form.Item>
           {kind === 'template' ? (

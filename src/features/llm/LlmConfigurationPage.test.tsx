@@ -1,3 +1,6 @@
+const fieldState = vi.hoisted(() => ({writable: true}))
+vi.mock('../../permissions/FieldCatalog', () => ({useWritableFields: () => fieldState.writable}))
+import {authorizationFixture} from '../../test/permissionFixtures'
 import {QueryClient, QueryClientProvider} from '@tanstack/react-query'
 import {cleanup, fireEvent, render, screen, waitFor, within} from '@testing-library/react'
 import {MemoryRouter, Route, Routes} from 'react-router-dom'
@@ -25,7 +28,7 @@ vi.mock('../../auth/AuthContext', () => ({
   useAuth: () => ({
     loading: false,
     error: undefined,
-    authorization: {permissions: grants.current},
+    authorization: authorizationFixture('yuheng', grants.current),
     login: vi.fn(),
     logout: vi.fn(),
     refreshAuthorization: vi.fn(),
@@ -161,6 +164,7 @@ const buttonIn = (scope: HTMLElement, label: string) => {
 }
 
 beforeEach(() => {
+  fieldState.writable = true
   grants.current = []
   Object.values(llm).forEach((fn) => fn.mockReset())
   llm.channels.mockResolvedValue({items: [localChannel(), cloudChannel], page: 1, size: 20, total: 2})
@@ -420,4 +424,16 @@ describe('LlmConfigurationPage dictionaries (TEST-004)', () => {
     // 前端不发送残留值，避免「看起来还能改」的错觉。
     expect(modelCommandOf(0)).not.toHaveProperty('revision')
   })
+})
+
+
+it('keeps channel and model mutations disabled when backend FIELD projection is not writable', async () => {
+  fieldState.writable = false
+  grants.current = ['yuheng:llm:read', 'yuheng:llm:write']
+  renderPage()
+  await screen.findByText('local-main')
+  expect(buttonIn(document.body, '新建渠道')).toBeDisabled()
+  expect(screen.getAllByText('编辑渠道').every(label => label.closest('button')?.disabled)).toBe(true)
+  expect(llm.replaceChannel).not.toHaveBeenCalled()
+  expect(llm.replaceModel).not.toHaveBeenCalled()
 })

@@ -1,7 +1,7 @@
 import type {AdminErrorBody} from './types'
 import {createLogicalTrace, type LogicalTrace, traceHeaders} from './trace'
 
-const API_BASE_URL = import.meta.env.VITE_YUHENG_ORIGIN ?? ''
+import {createWorkspaceTransport} from '../auth/authTransport'
 const CONTRACT_VERSION = 'v1'
 
 const traceIdFromTraceparent = (value: string | null): string | undefined => {
@@ -86,13 +86,15 @@ export const apiRequest = async <T>(
     headers.set('Content-Type', 'application/json')
     body = JSON.stringify(request.body)
   }
+  let response: Response | undefined
+  const transport = createWorkspaceTransport('yuheng', async (...args) => {
+    const value = await globalThis.fetch(...args)
+    response = value.clone()
+    return value
+  })
   try {
-      const response = await fetch(`${API_BASE_URL}${path}`, {
-      ...request,
-          credentials: 'include',
-      body,
-      headers,
-    })
+    const value = await transport.request<T>(path, {...request, body, headers})
+    if (!response) throw new Error('应用请求未返回响应')
     if (!response.ok) {
       throw await decodeError(response)
     }
@@ -108,8 +110,9 @@ export const apiRequest = async <T>(
         trace?.traceId,
       )
     }
-    return (await response.json()) as T
+    return value
   } catch (error) {
+    if (response && !response.ok) throw await decodeError(response)
     if (error instanceof GatewayApiError || error instanceof DOMException) {
       throw error
     }

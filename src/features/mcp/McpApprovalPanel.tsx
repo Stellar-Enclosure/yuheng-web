@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery } from '@tanstack/react-query'
 import { Alert, Button, Form, Input, InputNumber, Space, Typography } from 'antd'
 import { useState } from 'react'
@@ -21,7 +22,8 @@ export const McpApprovalPanel = ({
   gatewayGroupId: string
   serverCode: string
 }) => {
-  const canApprove = useCapability('yuheng:mcp:approve')
+  const canApproveFieldsWritable = useWritableFields('McpApprovalRequestDTO')
+  const canApprove = useCapability('yuheng.button.McpApprovalPanel.canApprove') && canApproveFieldsWritable
   const [form] = Form.useForm<ApprovalForm>()
   const [visibleToken, setVisibleToken] = useState<string>()
   const tools = useQuery({
@@ -50,11 +52,11 @@ export const McpApprovalPanel = ({
       {!canApprove ? (
         <Typography.Text type="secondary">当前账号缺少 yuheng:mcp:approve 能力。</Typography.Text>
       ) : (
-        <Form
+        <Form disabled={!canApprove}
           form={form}
           layout="vertical"
           initialValues={{ arguments: '{}', ttlSeconds: 120 }}
-          onFinish={(values) => {
+          onFinish={(values) => {if (!canApprove) return;
             setVisibleToken(undefined)
             issue.mutate(values)
           }}

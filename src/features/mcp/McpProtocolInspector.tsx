@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation } from '@tanstack/react-query'
 import { Alert, Button, Input, Select, Space, Tag, Typography } from 'antd'
 import { useMemo, useState } from 'react'
@@ -29,7 +30,8 @@ export const McpProtocolInspector = ({ serverId, dialects }: {
   serverId: string
   dialects: McpProtocolDialect[]
 }) => {
-  const canTest = useCapability('yuheng:mcp:test')
+  const canTestFieldsWritable = useWritableFields('McpProtocolInspectRequestDTO')
+  const canTest = useCapability('yuheng.button.McpProtocolInspector.canTest') && canTestFieldsWritable
   const initialDialect = dialects[0] ?? 'STABLE_2025_11_25'
   const [dialect, setDialect] = useState<McpProtocolDialect>(initialDialect)
   const [method, setMethod] = useState('initialize')
@@ -71,6 +73,7 @@ export const McpProtocolInspector = ({ serverId, dialects }: {
       </Space>
       <Space orientation="vertical" size="middle" style={{ width: '100%' }}>
         <Select<McpProtocolDialect>
+          disabled={!canTest}
           aria-label="协议版本"
           value={dialect}
           style={{ width: 300 }}
@@ -78,6 +81,7 @@ export const McpProtocolInspector = ({ serverId, dialects }: {
           onChange={(value) => changeTemplate(value, method)}
         />
         <Select
+          disabled={!canTest}
           aria-label="MCP Method"
           value={method}
           style={{ width: 300 }}
@@ -93,6 +97,7 @@ export const McpProtocolInspector = ({ serverId, dialects }: {
           onChange={(value) => changeTemplate(dialect, value)}
         />
         <Input.TextArea
+          disabled={!canTest}
           aria-label="Params JSON"
           value={params}
           rows={10}

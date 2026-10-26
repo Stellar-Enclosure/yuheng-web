@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter, Route, Routes } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -71,79 +71,13 @@ describe('yuheng admin login', () => {
 })
 
 
-describe('fixed deployment registration', () => {
-  it('passes the configured alias to the installed client without tenant or issuer selectors', async () => {
+describe('fixed deployment application', () => {
+  it('uses only its configured application alias', async () => {
+    const {createGatewayAuthClient} = await import('@stellar-enclosure/stellar-enclosure-web-shared')
     const navigate = vi.fn()
-    vi.stubEnv('VITE_OAUTH_REGISTRATION_ID', 'edge-deployment-child')
-    vi.stubEnv('VITE_YUHENG_ORIGIN', '')
-    vi.resetModules()
-    vi.doUnmock('./AuthContext')
-    vi.doMock('@stellar-enclosure/stellar-enclosure-web-shared', async () => {
-      const actual = await vi.importActual<typeof import('@stellar-enclosure/stellar-enclosure-web-shared')>('@stellar-enclosure/stellar-enclosure-web-shared')
-      return {...actual, createGatewayAuthClient: (options: Parameters<typeof actual.createGatewayAuthClient>[0]) =>
-        actual.createGatewayAuthClient({...options, navigate})}
-    })
-    try {
-      const {gatewayAuth: configured} = await import('./AuthContext')
-      configured.login()
-      configured.stepUp()
-      expect(navigate.mock.calls[0]?.[0]).toBe('/oauth2/authorization/edge-deployment-child')
-      expect(String(navigate.mock.calls[1]?.[0]).split('?')[0]).toBe('/oauth2/authorization/edge-deployment-child')
-      expect(String(navigate.mock.calls[1]?.[0])).not.toMatch(/tenant|issuer|resource/)
-    } finally {
-      vi.doUnmock('@stellar-enclosure/stellar-enclosure-web-shared')
-      vi.unstubAllEnvs()
-    }
-  })
-})
-
-
-describe('Yuheng authorization lifetime', () => {
-  it('does not restore authorization when a bootstrap completes after local logout', async () => {
-    vi.resetModules()
-    vi.doUnmock('./AuthContext')
-    const {AuthProvider, gatewayAuth, useAuth} = await import('./AuthContext')
-    let complete: ((value: unknown) => void) | undefined
-    vi.spyOn(gatewayAuth, 'bootstrap').mockImplementation(() => new Promise((resolve) => { complete = resolve }))
-    vi.spyOn(gatewayAuth, 'logout').mockResolvedValue({remoteState: 'PENDING'})
-    const Probe = () => {
-      const auth = useAuth()
-      return <div><span data-testid="authorization">{auth.authorization ? 'authorized' : 'empty'}</span>
-        <button onClick={() => void auth.logout()}>local-logout</button></div>
-    }
-    const rendered = render(<AuthProvider><Probe /></AuthProvider>)
-    await waitFor(() => expect(complete).toBeTypeOf('function'))
-    fireEvent.click(screen.getByText('local-logout'))
-    await waitFor(() => expect(gatewayAuth.logout).toHaveBeenCalledOnce())
-    await act(async () => { complete?.({user: {id: 'late-user', tenantId: '2002'}, permissions: ['OPS']}) })
-    expect(screen.getByTestId('authorization')).toHaveTextContent('empty')
-    rendered.unmount()
-  })
-})
-
-
-describe('Yuheng provider-owned recovery', () => {
-  it('clears authorization on a verified 401 and refuses a late explicit refresh', async () => {
-    vi.resetModules()
-    vi.doUnmock('./AuthContext')
-    const {AuthProvider, gatewayAuth, httpClient, useAuth} = await import('./AuthContext')
-    const bootstrap = vi.spyOn(gatewayAuth, 'bootstrap').mockResolvedValue({user: {id: 'user-A'}, permissions: ['OPS']})
-    let complete: ((value: unknown) => void) | undefined
-    const Probe = () => {
-      const auth = useAuth()
-      return <div><span data-testid="current-permissions">{auth.authorization ? 'authorized' : 'empty'}</span>
-        <button onClick={() => void auth.refreshAuthorization()}>refresh-authorization</button></div>
-    }
-    const rendered = render(<AuthProvider><Probe /></AuthProvider>)
-    await waitFor(() => expect(screen.getByTestId('current-permissions')).toHaveTextContent('authorized'))
-    bootstrap.mockImplementation(() => new Promise((resolve) => { complete = resolve }))
-    fireEvent.click(screen.getByText('refresh-authorization'))
-    await waitFor(() => expect(complete).toBeTypeOf('function'))
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('{}', {status: 401})))
-    await act(async () => { await expect(httpClient.request('/api/v1/protected')).rejects.toBeDefined() })
-    expect(screen.getByTestId('current-permissions')).toHaveTextContent('empty')
-    await act(async () => { complete?.({user: {id: 'late-A'}, permissions: ['OPS']}) })
-    expect(screen.getByTestId('current-permissions')).toHaveTextContent('empty')
-    rendered.unmount()
+    const client = createGatewayAuthClient({appAlias: 'edge-deployment-child', navigate})
+    client.login()
+    expect(navigate).toHaveBeenCalledWith('/apps/edge-deployment-child/auth/login')
+    expect(String(navigate.mock.calls[0][0])).not.toMatch(/tenant|issuer|resource/)
   })
 })

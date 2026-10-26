@@ -1,3 +1,5 @@
+import {usePermission} from '@stellar-enclosure/stellar-enclosure-web-shared/react-permissions'
+import {resources} from '../permissions/resources'
 import {
     ApiOutlined,
     AppstoreOutlined,
@@ -21,7 +23,7 @@ import {
 import {Outlet, useNavigate} from 'react-router-dom'
 import {version} from '../../package.json'
 import {useAuth} from '../auth/AuthContext'
-import {type Capability, useCapability} from '../app/capabilities'
+import {type Capability} from '../app/capabilities'
 
 // 平台自己的导航树，由 capability 递归剪枝后交给 shared 左侧树。
 interface GatewayNavItem {
@@ -39,47 +41,47 @@ interface WujieRuntimeWindow extends Window {
 }
 
 const navigation: readonly GatewayNavItem[] = [
-  { key: '/dashboard', path: '/dashboard', icon: <DashboardOutlined />, label: '总览', capability: 'yuheng:read' },
+  { key: '/dashboard', path: '/dashboard', icon: <DashboardOutlined />, label: '总览', capability: 'yuheng.menu.dashboard' },
   {
     key: 'yuheng-governance',
     icon: <DeploymentUnitOutlined />,
     label: '网关治理',
-    capability: 'yuheng:read',
+    capability: 'yuheng.menu.group1',
     children: [
-      {key: '/yuheng-groups', path: '/yuheng-groups', icon: <DeploymentUnitOutlined />, label: 'Yuheng Group', capability: 'yuheng:read'},
-      {key: '/applications', path: '/applications', icon: <KeyOutlined />, label: 'Application / Credential', capability: 'yuheng:read'},
-      {key: '/openapi-sync', path: '/openapi-sync', icon: <ApiOutlined />, label: 'OpenAPI 同步', capability: 'yuheng:read'},
-      {key: '/interface-catalog', path: '/interface-catalog', activePathPrefixes: ['/operations'], icon: <AppstoreOutlined />, label: '接口目录', capability: 'yuheng:read'},
-      {key: '/providers', path: '/providers', icon: <ApiOutlined />, label: 'Provider', capability: 'yuheng:read'},
+      {key: '/yuheng-groups', path: '/yuheng-groups', icon: <DeploymentUnitOutlined />, label: 'Yuheng Group', capability: 'yuheng.menu.yuheng.groups'},
+      {key: '/applications', path: '/applications', icon: <KeyOutlined />, label: 'Application / Credential', capability: 'yuheng.menu.applications'},
+      {key: '/openapi-sync', path: '/openapi-sync', icon: <ApiOutlined />, label: 'OpenAPI 同步', capability: 'yuheng.menu.openapi.sync'},
+      {key: '/interface-catalog', path: '/interface-catalog', activePathPrefixes: ['/operations'], icon: <AppstoreOutlined />, label: '接口目录', capability: 'yuheng.menu.interface.catalog'},
+      {key: '/providers', path: '/providers', icon: <ApiOutlined />, label: 'Provider', capability: 'yuheng.menu.providers'},
     ],
   },
   {
     key: 'mcp',
     icon: <RobotOutlined />,
     label: 'MCP',
-    capability: 'yuheng:mcp:read',
+    capability: 'yuheng.menu.group2',
     children: [
-      {key: '/mcp/servers', path: '/mcp/servers', icon: <RobotOutlined />, label: 'MCP Control Plane', capability: 'yuheng:mcp:read'},
-      {key: '/mcp/remote-providers', path: '/mcp/remote-providers', icon: <ShareAltOutlined />, label: 'Remote MCP', capability: 'yuheng:mcp:read'},
+      {key: '/mcp/servers', path: '/mcp/servers', icon: <RobotOutlined />, label: 'MCP Control Plane', capability: 'yuheng.menu.mcp.servers'},
+      {key: '/mcp/remote-providers', path: '/mcp/remote-providers', icon: <ShareAltOutlined />, label: 'Remote MCP', capability: 'yuheng.menu.mcp.remote.providers'},
     ],
   },
   {
     key: 'llm',
     icon: <ThunderboltOutlined />,
     label: '模型网关',
-    capability: 'yuheng:llm:read',
+    capability: 'yuheng.menu.group3',
     children: [
-      {key: '/llm/configuration', path: '/llm/configuration', icon: <ThunderboltOutlined />, label: '模型与渠道', capability: 'yuheng:llm:read'},
+      {key: '/llm/configuration', path: '/llm/configuration', icon: <ThunderboltOutlined />, label: '模型与渠道', capability: 'yuheng.menu.llm.configuration'},
     ],
   },
   {
     key: 'observability',
     icon: <EyeOutlined />,
     label: '观测与审计',
-    capability: 'yuheng:read',
+    capability: 'yuheng.menu.group4',
     children: [
-      {key: '/observability/traces', path: '/observability/traces', icon: <EyeOutlined />, label: '调用观测', capability: 'yuheng:read'},
-      {key: '/audit', path: '/audit', icon: <AuditOutlined />, label: '审计日志', capability: 'yuheng:read'},
+      {key: '/observability/traces', path: '/observability/traces', icon: <EyeOutlined />, label: '调用观测', capability: 'yuheng.menu.observability.traces'},
+      {key: '/audit', path: '/audit', icon: <AuditOutlined />, label: '审计日志', capability: 'yuheng.menu.audit'},
     ],
   },
 ]
@@ -88,17 +90,10 @@ export const AdminLayout = () => {
   const navigate = useNavigate()
   const queryClient = useQueryClient()
   const auth = useAuth()
-  // 能力必须在渲染顶层逐个显式订阅（不能在循环里调用 Hook），再交给导航剪枝。
-  const canRead = useCapability('yuheng:read')
-  const canReadMcp = useCapability('yuheng:mcp:read')
-  const canReadLlm = useCapability('yuheng:llm:read')
+  const permission = usePermission(auth.authorization?.snapshot ?? null, auth.authorization?.binding ?? null)
 
   const embedded = (window as WujieRuntimeWindow).$wujie?.props?.embedded === true
-  const items: EnterpriseNavigationItem[] = filterNavigation(navigation, {
-    'yuheng:read': canRead,
-    'yuheng:mcp:read': canReadMcp,
-    'yuheng:llm:read': canReadLlm,
-  })
+  const items: EnterpriseNavigationItem[] = filterNavigation(navigation, Object.fromEntries(resources.map(resource => [resource.key, permission.allows('requirement' in resource ? resource.requirement : {access: resource.access})])))
 
   const config: EnterpriseLayoutConfig = {
     platformName: 'Yuheng Admin',

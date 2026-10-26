@@ -15,7 +15,7 @@ export const McpCapabilityValidationButton = ({
   capabilityId,
   gatewayGroupId,
 }: McpCapabilityValidationButtonProps) => {
-  const canTest = useCapability('yuheng:mcp:test')
+  const canTest = useCapability('yuheng.button.McpCapabilityValidationButton.canTest')
   const validation = useMutation({
     mutationFn: () => gatewayApi.validateMcpCapability(plural, capabilityId, gatewayGroupId),
   })

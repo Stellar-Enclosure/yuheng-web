@@ -12,26 +12,6 @@ export type GatewayScopeBinding = Scope & {
   gatewayApplicationId?: string
 }
 
-export type AuthorizationBootstrap = {
-    user: {
-        id: string
-        tenantId: string
-        identitySub: string
-        status: string
-    }
-    activeRoleContexts: Array<Record<string, unknown>>
-    permissions: string[]
-    apps: Array<Record<string, unknown>>
-    menus: Array<Record<string, unknown>>
-    routes: Array<Record<string, unknown>>
-    actions: Array<Record<string, unknown>>
-    fieldPolicies: Record<string, unknown>
-    defaultApplicationCode: string | null
-    defaultRoute: string | null
-    authVersion: number
-    policyVersion: number
-}
-
 export type GatewayGroup = {
   id: string
   gatewayGroupCode: string

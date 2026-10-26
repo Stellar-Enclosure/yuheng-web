@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -88,7 +89,8 @@ export const CatalogPage = () => {
   const [hierarchyForm] = Form.useForm()
   const [operationForm] = Form.useForm()
   const queryClient = useQueryClient()
-  const canWrite = useCapability('yuheng:catalog:write')
+  const canWriteFieldsWritable = useWritableFields('GatewayManualInterfaceGroupRequestDTO', 'GatewayManualOperationRequestDTO')
+  const canWrite = useCapability('yuheng.button.CatalogPage.canWrite') && canWriteFieldsWritable
   const applications = useQuery({
     queryKey: ['applications', filters],
     queryFn: ({ signal }) => gatewayApi.applications(filters, signal),
@@ -241,10 +243,10 @@ export const CatalogPage = () => {
         confirmLoading={createHierarchy.isPending}
         destroyOnHidden
       >
-        <Form
+        <Form disabled={!canWrite}
           form={hierarchyForm}
           layout="vertical"
-          onFinish={(values) => createHierarchy.mutate(values)}
+          onFinish={(values) => {if (canWrite) { createHierarchy.mutate(values) }}}
         >
           {[
             ['businessCode', '业务域 Code'],
@@ -270,7 +272,7 @@ export const CatalogPage = () => {
         confirmLoading={createOperation.isPending}
         destroyOnHidden
       >
-        <Form
+        <Form disabled={!canWrite}
           form={operationForm}
           layout="vertical"
           initialValues={{
@@ -280,7 +282,7 @@ export const CatalogPage = () => {
             version: '1.0.0',
             externalAccessible: false,
           }}
-          onFinish={(values) => createOperation.mutate(values)}
+          onFinish={(values) => {if (canWrite) { createOperation.mutate(values) }}}
         >
           <Form.Item name="interfaceGroupId" label="接口组" rules={[{ required: true }]}>
             <Select options={groups} showSearch optionFilterProp="label" />

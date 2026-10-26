@@ -1,0 +1,34 @@
+{
+  "schemaVersion": 1,
+  "application": {
+    "businessCode": "xingyuan",
+    "applicationCode": "yuheng"
+  },
+  "producerId": "yuheng-web",
+  "ownedKeyPrefixes": [
+    "yuheng.app.",
+    "yuheng.menu.",
+    "yuheng.page.",
+    "yuheng.button."
+  ],
+  "expectedModules": [
+    "console"
+  ],
+  "modules": {
+    "console": {
+      "entryPoints": [
+        "src/permissions/permissions.ts",
+        "src/permissions/resources.ts",
+        "src/permissions/fieldReferences.ts"
+      ]
+    }
+  },
+  "artifact": {
+    "repository": "yuheng-web",
+    "commit": "ce4ff9c64420466f3f4d5276f6e25b813e294044",
+    "buildId": "local-source",
+    "version": "0.0.1"
+  },
+  "tsconfig": "tsconfig.app.json",
+  "toolchainLock": "permission-toolchain.lock.json"
+}

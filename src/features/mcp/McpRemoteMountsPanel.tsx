@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -40,8 +41,9 @@ export const McpRemoteMountsPanel = ({ serverId, gatewayGroupId, draftRevision }
   gatewayGroupId: string
   draftRevision: number
 }) => {
-  const canWrite = useCapability('yuheng:mcp:write')
-  const canTest = useCapability('yuheng:mcp:test')
+  const canWriteFieldsWritable = useWritableFields('McpRemoteMountRequestDTO', 'McpServerMutationRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpRemoteMountsPanel.canWrite') && canWriteFieldsWritable
+  const canTest = useCapability('yuheng.button.McpRemoteMountsPanel.canTest')
   const queryClient = useQueryClient()
   const [form] = Form.useForm<MountForm>()
   const [editing, setEditing] = useState<McpRemoteMount>()
@@ -195,7 +197,7 @@ export const McpRemoteMountsPanel = ({ serverId, gatewayGroupId, draftRevision }
         destroyOnHidden
       >
         {save.error && <QueryFailure error={save.error} />}
-        <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={(values) => {if (canWrite) { save.mutate(values) }}}>
           <Form.Item name="providerId" label="Remote Provider" rules={[{ required: true }]}>
             <Select
               disabled={Boolean(editing)}

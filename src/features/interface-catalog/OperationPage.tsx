@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -78,7 +79,8 @@ const OpenApiUnavailable = () => (
 export const OperationPage = () => {
   const { operationId = '' } = useParams()
   const queryClient = useQueryClient()
-  const canWrite = useCapability('yuheng:catalog:write')
+  const canWriteFieldsWritable = useWritableFields('GatewayManualDefinitionRequestDTO', 'GatewayManualMetadataRequestDTO')
+  const canWrite = useCapability('yuheng.button.OperationPage.canWrite') && canWriteFieldsWritable
   const [activeTab, setActiveTab] = useState('schema')
   const [downloadPending, setDownloadPending] = useState(false)
   const [actionError, setActionError] = useState<string>()
@@ -316,7 +318,7 @@ export const OperationPage = () => {
         confirmLoading={metadataMutation.isPending}
         destroyOnHidden
       >
-        <Form form={metadataForm} layout="vertical" onFinish={(values) => metadataMutation.mutate(values)}>
+        <Form disabled={!canWrite} form={metadataForm} layout="vertical" onFinish={(values) => {if (canWrite) { metadataMutation.mutate(values) }}}>
           <Form.Item name="summary" label="摘要"><Input /></Form.Item>
           <Form.Item name="tags" label="标签（逗号或空格分隔）" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="owner" label="Owner"><Input /></Form.Item>
@@ -333,7 +335,7 @@ export const OperationPage = () => {
         confirmLoading={definitionMutation.isPending}
         destroyOnHidden
       >
-        <Form form={definitionForm} layout="vertical" onFinish={(values) => definitionMutation.mutate(values)}>
+        <Form disabled={!canWrite} form={definitionForm} layout="vertical" onFinish={(values) => {if (canWrite) { definitionMutation.mutate(values) }}}>
           <Form.Item name="summary" label="摘要"><Input /></Form.Item>
           <Form.Item name="tags" label="标签（逗号或空格分隔）" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="requestSchema" label="Request Schema JSON" rules={[{ required: true }]}><Input.TextArea rows={6} /></Form.Item>

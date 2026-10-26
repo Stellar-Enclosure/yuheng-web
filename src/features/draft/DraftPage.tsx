@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Alert,
@@ -136,7 +137,8 @@ export const DraftPage = () => {
   const { groupId = '' } = useParams()
   const location = useLocation()
   const queryClient = useQueryClient()
-  const canWrite = useCapability('yuheng:drafts:write')
+  const canWriteFieldsWritable = useWritableFields('GatewayDraftMutationRequestDTO', 'GatewayDraftRouteRequestDTO', 'GatewayDraftPolicyRequestDTO')
+  const canWrite = useCapability('yuheng.button.DraftPage.canWrite') && canWriteFieldsWritable
   const [routeForm] = Form.useForm<RouteEditorValues>()
   const [policyForm] = Form.useForm()
   const [routeOpen, setRouteOpen] = useState(false)
@@ -411,7 +413,7 @@ export const DraftPage = () => {
     saveRoute.isPending
     && saveRoute.variables?.editorSession === activeEditorSession,
   )
-  const routeFormDisabled = validatingRoute || currentEditorSaving
+  const routeFormDisabled = !canWrite || validatingRoute || currentEditorSaving
   const currentTransportPolicy = watchedRoute?.transportPolicy
   const currentTransportState = transportFormState(
     currentOperation?.protocol,
@@ -582,7 +584,7 @@ export const DraftPage = () => {
             priority: 0,
             advancedContent: '{}',
           }}
-          onFinish={submitRoute}
+          onFinish={values => {if (canWrite) submitRoute(values)}}
         >
           <Form.Item name="routeId" label="Route ID" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item
@@ -877,7 +879,7 @@ export const DraftPage = () => {
         confirmLoading={savePolicy.isPending}
         destroyOnHidden
       >
-        <Form
+        <Form disabled={!canWrite}
           form={policyForm}
           layout="vertical"
           initialValues={{
@@ -886,7 +888,7 @@ export const DraftPage = () => {
             advancedContent: '{}',
             failureMode: 'FAIL_CLOSED',
           }}
-          onFinish={(values) => savePolicy.mutate(values)}
+          onFinish={(values) => {if (canWrite) { savePolicy.mutate(values) }}}
         >
           <Form.Item name="policyId" label="Policy ID" rules={[{ required: true }]}><Input /></Form.Item>
           <Form.Item name="policyType" label="能力" rules={[{ required: true }]}>

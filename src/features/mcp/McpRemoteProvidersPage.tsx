@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -46,8 +47,9 @@ const value = (content: Record<string, unknown>, name: string): string =>
 export const McpRemoteProvidersPage = () => {
   const [searchParams, setSearchParams] = useSearchParams()
   const filters = readScopeSearchParams(searchParams, ['env', 'namespace'])
-  const canWrite = useCapability('yuheng:mcp:write')
-  const canTest = useCapability('yuheng:mcp:test')
+  const canWriteFieldsWritable = useWritableFields('McpRemoteProviderRequestDTO', 'McpServerMutationRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpRemoteProvidersPage.canWrite') && canWriteFieldsWritable
+  const canTest = useCapability('yuheng.button.McpRemoteProvidersPage.canTest')
   const queryClient = useQueryClient()
   const [selectedGroupId, setSelectedGroupId] = useState('')
   const [editing, setEditing] = useState<McpRemoteProvider>()
@@ -221,7 +223,7 @@ export const McpRemoteProvidersPage = () => {
         destroyOnHidden
       >
         {save.error && <QueryFailure error={save.error} />}
-        <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
+        <Form disabled={!canWrite} form={form} layout="vertical" onFinish={(values) => {if (canWrite) { save.mutate(values) }}}>
           <Form.Item name="providerCode" label="Provider Code" rules={[{ required: true }]}>
             <Input disabled={Boolean(editing)} />
           </Form.Item>

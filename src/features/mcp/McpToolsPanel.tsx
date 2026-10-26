@@ -1,3 +1,4 @@
+import {useWritableFields} from '../../permissions/FieldCatalog'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import {
   Button,
@@ -47,7 +48,8 @@ export const McpToolsPanel = ({ serverId, gatewayGroupId, draftRevision }: {
   gatewayGroupId: string
   draftRevision: number
 }) => {
-  const canWrite = useCapability('yuheng:mcp:write')
+  const canWriteFieldsWritable = useWritableFields('McpManagedToolOverrideRequestDTO', 'McpToolMutationRequestDTO')
+  const canWrite = useCapability('yuheng.button.McpToolsPanel.canWrite') && canWriteFieldsWritable
   const queryClient = useQueryClient()
   const [messageApi, messageContext] = message.useMessage()
   const [form] = Form.useForm<OverrideForm>()
@@ -289,7 +291,7 @@ export const McpToolsPanel = ({ serverId, gatewayGroupId, draftRevision }: {
                 <Tag color={riskColor(editing.codeRiskLevel)}>{editing.codeRiskLevel}</Tag>
               </Descriptions.Item>
             </Descriptions>
-            <Form form={form} layout="vertical" onFinish={(values) => save.mutate(values)}>
+            <Form disabled={!canWrite} form={form} layout="vertical" onFinish={(values) => {if (canWrite) { save.mutate(values) }}}>
               <Form.Item name="serverId" label="MCP Server" rules={[{ required: true }]}>
                 <Select
                   loading={servers.isLoading}
